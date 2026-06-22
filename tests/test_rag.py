@@ -2,7 +2,7 @@ import json
 
 import adip.rag.rerank as rerank_module
 from adip.rag.chunks import read_chunks_jsonl
-from adip.rag.evaluate import evaluate
+from adip.rag.evaluate import aggregate_by_category, evaluate, read_golden
 from adip.rag.rerank import rerank_results
 from adip.rag.retriever import build_index, load_index
 
@@ -285,6 +285,55 @@ def test_evaluate_reports_hit_rate(tmp_path):
     assert report["question_count"] == 1
     assert report["hit_rate_at_k"] == 1.0
     assert report["mrr"] == 1.0
+
+
+def test_aggregate_by_category_slices_hit_rate_and_mrr():
+    results = [
+        {"category": "legal", "hit": True, "rank": 1},
+        {"category": "legal", "hit": False, "rank": None},
+        {"category": "finance", "hit": True, "rank": 2},
+        {"category": None, "hit": True, "rank": 1},
+    ]
+    hit_rate, mrr = aggregate_by_category(results)
+    assert hit_rate["legal"] == 0.5
+    assert mrr["legal"] == 0.5  # one hit at rank 1, one miss, averaged over 2
+    assert hit_rate["finance"] == 1.0
+    assert mrr["finance"] == 0.5  # single hit at rank 2 -> 1/2
+    assert hit_rate["uncategorized"] == 1.0  # None category bucketed
+
+
+def test_read_golden_preserves_category_field(tmp_path):
+    golden_path = tmp_path / "golden.jsonl"
+    golden_path.write_text(
+        json.dumps({"question": "q?", "expected_substrings": ["a"], "category": "legal"}) + "\n",
+        encoding="utf-8",
+    )
+    rows = read_golden(golden_path)
+    assert rows[0]["category"] == "legal"
+
+
+def test_evaluate_emits_by_category_slices(tmp_path):
+    chunks = [
+        make_chunk("chunk_law", "Personal data shall be processed lawfully under the regulation."),
+        make_chunk("chunk_fin", "A mutual fund pools money from many investors into a portfolio."),
+    ]
+    index_path = tmp_path / "vector_index"
+    build_index(chunks).save(index_path)
+
+    golden_path = tmp_path / "golden.jsonl"
+    golden_path.write_text(
+        json.dumps({"question": "How is personal data processed?", "expected_substrings": ["processed lawfully"], "category": "legal"})
+        + "\n"
+        + json.dumps({"question": "What is a mutual fund?", "expected_substrings": ["pools money from many investors"], "category": "finance"})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = evaluate(index_path, golden_path, top_k=2)
+    assert set(report["hit_rate_by_category"]) == {"legal", "finance"}
+    assert report["hit_rate_by_category"]["legal"] == 1.0
+    assert report["mrr_by_category"]["finance"] == 1.0
+    assert report["results"][0]["category"] == "legal"
 
 
 def test_evaluate_with_reranker_reports_reranker_metadata(tmp_path):

@@ -135,6 +135,7 @@ def evaluate(
         results.append(
             {
                 "question": row["question"],
+                "category": row.get("category"),
                 "hit": hit,
                 "rank": rank,
                 "retrieved_chunk_ids": [item.chunk["chunk_id"] for item in retrieved],
@@ -144,6 +145,7 @@ def evaluate(
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     total = len(golden)
+    hit_rate_by_category, mrr_by_category = aggregate_by_category(results)
     return {
         "backend": index.backend,
         "chunk_count": len(index.chunks),
@@ -162,10 +164,28 @@ def evaluate(
         "question_count": total,
         "hit_rate_at_k": hits / total,
         "mrr": sum(reciprocal_ranks) / total,
+        "hit_rate_by_category": hit_rate_by_category,
+        "mrr_by_category": mrr_by_category,
         "elapsed_ms": elapsed_ms,
         "avg_query_latency_ms": sum(query_latencies) / total,
         "results": results,
     }
+
+
+def aggregate_by_category(results: list[dict[str, Any]]) -> tuple[dict[str, float], dict[str, float]]:
+    """Slice hit rate and MRR by the golden row's ``category`` (None -> 'uncategorized')."""
+    counts: dict[str, int] = {}
+    hits: dict[str, int] = {}
+    reciprocal: dict[str, float] = {}
+    for row in results:
+        category = row.get("category") or "uncategorized"
+        counts[category] = counts.get(category, 0) + 1
+        if row["hit"]:
+            hits[category] = hits.get(category, 0) + 1
+            reciprocal[category] = reciprocal.get(category, 0.0) + 1.0 / row["rank"]
+    hit_rate = {c: hits.get(c, 0) / counts[c] for c in sorted(counts)}
+    mrr = {c: reciprocal.get(c, 0.0) / counts[c] for c in sorted(counts)}
+    return hit_rate, mrr
 
 
 def path_size_bytes(path: Path) -> int:

@@ -1,0 +1,3 @@
+# SEC Form 10-K
+
+The annual report on Form 10-K provides a comprehensive overview of a company's business and financial condition and includes audited financial statements. Domestic public companies must file the Form 10-K with the U.S. Securities and Exchange Commission each year. It is distinct from the glossy annual report to shareholders that a company sends ahead of its annual meeting. A Form 10-K typically includes sections describing the business, risk factors, management's discussion and analysis of financial condition and results of operations (MD&A), and the audited financial statements with accompanying notes.

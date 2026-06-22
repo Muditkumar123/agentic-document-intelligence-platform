@@ -244,7 +244,7 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_e
   --reasoning-effort none
 ```
 
-The latest report is surfaced as the dashboard's **Answer Quality** tiles and `GET /monitoring/generation-eval`. On the current golden set the extractive baseline scores about 0.68 faithfulness, 1.0 grounded rate, and 0.9 expected coverage.
+The latest report is surfaced as the dashboard's **Answer Quality** tiles and `GET /monitoring/generation-eval`. The CI quality gate runs this over a **corpus of real public documents** (`data/eval/` — GDPR/EU AI Act, IETF RFCs, NIST, SEC, arXiv, 18 docs across 5 categories, 45 golden questions) so the numbers are not overfit to project-authored text. On that corpus the extractive baseline scores about **0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage** (retrieval is saturated at 1.0 because the domains are lexically distinct, so faithfulness is the discriminating metric). See [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md).
 
 ## Continuous Integration
 

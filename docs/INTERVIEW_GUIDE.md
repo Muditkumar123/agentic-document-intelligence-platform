@@ -283,6 +283,10 @@ Question: How do you evaluate answer quality, not just retrieval?
 
 Answer: I run a generation eval over the golden set that scores faithfulness (grounding in evidence), answer relevance, expected-fact coverage, and citation coverage, tracked as an MLOps run and surfaced on the dashboard. It is deterministic with the extractive baseline so it runs in CI, and the same harness can drive any hosted or local writer for model comparisons, with an LLM judge as a future upgrade.
 
+Question: Your retrieval hit rate is 1.0 — isn't that overfit / not meaningful?
+
+Answer: On the CI corpus it is 1.0, and I can explain exactly why: that corpus is 18 real public documents across five lexically-distinct domains (GDPR legal text, IETF RFCs, NIST, SEC, arXiv), so TF-IDF separates them trivially — it stays 1.0 even when sliced per category. That is an honest property of a clean, well-separated corpus, not the system memorizing answers. So I treat retrieval as a smoke test and put the **discriminating quality gate on generation faithfulness (~0.60)**, which actually varies and can regress. The retrieval *ranking* discrimination story is carried separately by the cross-encoder reranking benchmark on a hard-negative dataset, where reranking moves MRR from 0.733 to 0.900. I also deliberately switched the eval corpus from project-authored docs to real external sources precisely so the metrics can't be dismissed as "you wrote the documents and the questions."
+
 Question: Why compare TF-IDF and dense retrieval?
 
 Answer: TF-IDF is an explainable baseline. Dense retrieval should only be adopted if it improves retrieval metrics or solves semantic mismatch cases. The benchmark makes that decision measurable.
@@ -349,3 +353,4 @@ Concrete failure-and-fix stories. These answer "tell me about a hard bug you deb
 - Hardened the hosted-LLM answer path: sanitized model continuation output and surfaced reasoning-token truncation warnings, each covered by regression tests.
 - Built a deterministic answer-quality evaluation (faithfulness, relevance, expected-fact coverage, citations) over a golden set, tracked as MLOps runs and surfaced on the dashboard.
 - Set up a GitHub Actions CI pipeline that runs the test suite across Python 3.10–3.12 and enforces retrieval and answer-quality thresholds as automated quality gates, failing the build on metric regressions.
+- Built a credibility-first evaluation corpus of real public documents (GDPR, IETF RFCs, NIST, SEC, arXiv) across five domains with 45 categorized golden questions, exposing per-category retrieval slices and gating CI on generation faithfulness rather than a saturated retrieval metric.
