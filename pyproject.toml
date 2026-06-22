@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic-document-intelligence-platform"
+version = "0.1.0"
+description = "Agentic document intelligence platform with MLOps, LLMOps, and AgentOps pipelines."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "PyYAML",
+  "scikit-learn",
+  "Jinja2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx"]
+serve = [
+  "accelerate",
+  "transformers>=4.51.0",
+]
+api = [
+  "fastapi",
+  "python-multipart",
+  "uvicorn",
+]
+retrieval = [
+  "faiss-cpu",
+  "sentence-transformers",
+  "torch",
+  "transformers>=4.51.0",
+]
+
+[project.scripts]
+adip-ingest = "adip.ingestion.cli:main"
+adip-agent = "adip.agents.cli:main"
+adip-list-model-profiles = "adip.config.list_model_profiles:main"
+adip-mlops-agent = "adip.mlops.run_agent:main"
+adip-mlops-ingest = "adip.mlops.run_ingestion:main"
+adip-mlops-llmops-smoke = "adip.mlops.run_llmops_smoke:main"
+adip-mlops-rag-eval = "adip.mlops.run_rag_eval:main"
+adip-mlops-retrieval-benchmark = "adip.mlops.run_retrieval_benchmark:main"
+adip-mlops-generation-eval = "adip.mlops.run_generation_eval:main"
+adip-mlops-eval-gate = "adip.mlops.eval_gate:main"
+adip-llmops = "adip.llmops.cli:main"
+adip-api = "adip.api.cli:main"
+adip-rag-evaluate = "adip.rag.evaluate:main"
+adip-rag-index = "adip.rag.index:main"
+adip-rag-query = "adip.rag.query:main"
+adip-serving = "adip.serving.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"adip.api" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

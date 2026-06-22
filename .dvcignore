@@ -1,0 +1,5 @@
+# DVC should ignore runtime-only local artifacts.
+data/monitoring/agent_traces/
+data/monitoring/mlops_runs/
+data/processed/readme_command_check.jsonl
+data/processed/simon_chunks.jsonl

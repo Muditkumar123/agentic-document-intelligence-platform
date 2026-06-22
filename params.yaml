@@ -1,0 +1,40 @@
+ingestion:
+  chunk_size: 800
+  chunk_overlap: 120
+
+rag:
+  backend: tfidf
+  ngram_max: 2
+  top_k: 3
+  embedding_model: lsa
+  dense_dimensions: 128
+  faiss: true
+  candidate_k: 3
+  reranker: none
+  rerank_weight: 0.25
+
+retrieval_benchmark:
+  backends: "tfidf dense"
+  rerankers: "none lexical cross_encoder"
+  top_k: 3
+  candidate_k: 10
+  embedding_model: lsa
+  dense_dimensions: 128
+  faiss: true
+  rerank_weight: 0.25
+  cross_encoder_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+  cross_encoder_batch_size: 8
+
+agent_smoke:
+  question: "What does the platform do with documents?"
+  task: qa
+  domain: general
+  top_k: 3
+  model_profile: extractive_baseline
+
+llmops_smoke:
+  question: "What does the platform do with documents?"
+  task: qa
+  domain: general
+  top_k: 3
+  model_profile: extractive_baseline

@@ -1,0 +1,15 @@
+{"question": "What does the platform do with documents?", "expected_substrings": ["ingest long documents", "split text into overlapping chunks"]}
+{"question": "Which metrics evaluate retrieval quality?", "expected_substrings": ["hit rate at k", "mean reciprocal rank"]}
+{"question": "What does mean reciprocal rank reward?", "expected_substrings": ["place the first correct evidence chunk near the top"]}
+{"question": "Which nodes are in the agent workflow?", "expected_substrings": ["intent router", "citation checker"]}
+{"question": "What does each AgentOps trace event store?", "expected_substrings": ["node name", "input summary", "output summary"]}
+{"question": "What does the finance domain preset emphasize?", "expected_substrings": ["market, metric, risk, growth, and revenue"]}
+{"question": "When should the legal verifier mark an answer insufficient?", "expected_substrings": ["does not include the relevant clause or obligation"]}
+{"question": "What does every generation run record in LLMOps?", "expected_substrings": ["prompt path", "prompt version", "prompt hash"]}
+{"question": "Why is structured verifier output used?", "expected_substrings": ["keeps raw reasoning text for auditability", "normalized final verifier notes"]}
+{"question": "Which model is the default local writer?", "expected_substrings": ["Qwen3-8B is the default local writer model"]}
+{"question": "Which model is used as a reasoning specialist?", "expected_substrings": ["DeepSeek-R1-Distill-Qwen-14B is a reasoning specialist"]}
+{"question": "Which exact fields should an AgentOps trace event store for auditability?", "expected_substrings": ["node name", "input summary", "output summary", "error message"]}
+{"question": "Which precise metadata fields does every LLMOps generation run record?", "expected_substrings": ["prompt path", "prompt version", "prompt hash", "model profile"]}
+{"question": "Which local model should write normal document answers?", "expected_substrings": ["Qwen3-8B is the default local writer model"]}
+{"question": "Which local model should handle planning and evidence verification?", "expected_substrings": ["DeepSeek-R1-Distill-Qwen-14B is a reasoning specialist"]}

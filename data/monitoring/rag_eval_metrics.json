@@ -1,0 +1,253 @@
+{
+  "avg_query_latency_ms": 0.6447089836001396,
+  "backend": "tfidf",
+  "candidate_k": 3,
+  "chunk_count": 10,
+  "elapsed_ms": 9.83175728470087,
+  "embedding_model": null,
+  "golden_path": "data/reference/golden_qa.jsonl",
+  "hit_rate_at_k": 1.0,
+  "index_metadata": {
+    "matrix_shape": [
+      10,
+      731
+    ],
+    "ngram_max": 2,
+    "retrieval_backend": "tfidf"
+  },
+  "index_path": "data/processed/vector_index",
+  "index_size_bytes": 53389,
+  "index_vocabulary_size": 731,
+  "mrr": 0.7333333333333333,
+  "question_count": 15,
+  "rerank_weight": 0.25,
+  "reranker": "none",
+  "results": [
+    {
+      "hit": true,
+      "question": "What does the platform do with documents?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8",
+        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ],
+      "retrieved_citations": [
+        "sample_research_note.md p.1 chunk doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8",
+        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which metrics evaluate retrieval quality?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
+        "doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ],
+      "retrieved_citations": [
+        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
+        "academic_rag_evaluation.md p.1 chunk doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "What does mean reciprocal rank reward?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "doc_787c38c92bfb402c_p0001_c0000_bdb79a4518"
+      ],
+      "retrieved_citations": [
+        "academic_rag_evaluation.md p.1 chunk doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "hard_negative_llmops_terms.md p.1 chunk doc_787c38c92bfb402c_p0001_c0000_bdb79a4518"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which nodes are in the agent workflow?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6"
+      ],
+      "retrieved_citations": [
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "What does each AgentOps trace event store?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
+      ],
+      "retrieved_citations": [
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "sample_research_note.md p.1 chunk doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "What does the finance domain preset emphasize?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
+        "doc_32fb9580ca7ac581_p0001_c0000_850697633f",
+        "doc_f48f43fcaf891da7_p0001_c0000_1891de385b"
+      ],
+      "retrieved_citations": [
+        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
+        "legal_policy_brief.md p.1 chunk doc_32fb9580ca7ac581_p0001_c0000_850697633f",
+        "academic_rag_evaluation.md p.1 chunk doc_f48f43fcaf891da7_p0001_c0000_1891de385b"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "When should the legal verifier mark an answer insufficient?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_32fb9580ca7ac581_p0001_c0000_850697633f",
+        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ],
+      "retrieved_citations": [
+        "legal_policy_brief.md p.1 chunk doc_32fb9580ca7ac581_p0001_c0000_850697633f",
+        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "What does every generation run record in LLMOps?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ],
+      "retrieved_citations": [
+        "hard_negative_llmops_terms.md p.1 chunk doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Why is structured verifier output used?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
+        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ],
+      "retrieved_citations": [
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
+        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which model is the default local writer?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ],
+      "retrieved_citations": [
+        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which model is used as a reasoning specialist?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ],
+      "retrieved_citations": [
+        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which exact fields should an AgentOps trace event store for auditability?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ],
+      "retrieved_citations": [
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
+        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which precise metadata fields does every LLMOps generation run record?",
+      "rank": 2,
+      "retrieved_chunk_ids": [
+        "doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
+        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ],
+      "retrieved_citations": [
+        "hard_negative_llmops_terms.md p.1 chunk doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
+        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which local model should write normal document answers?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
+      ],
+      "retrieved_citations": [
+        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "sample_research_note.md p.1 chunk doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
+      ]
+    },
+    {
+      "hit": true,
+      "question": "Which local model should handle planning and evidence verification?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ],
+      "retrieved_citations": [
+        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
+        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
+        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+      ]
+    }
+  ],
+  "top_k": 3
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "CI quality-gate thresholds. Floors (min) and ceilings (max) are set with margin below/above the measured deterministic baseline so normal corpus tweaks pass but real regressions fail the build. Baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 0.767, faithfulness 0.679, grounded_rate 1.0, expected_coverage 0.9, answer_relevance 1.0, citation_coverage 0.61, refusal_rate 0.0. Regenerate the metric files with: python -m adip.mlops.run_rag_eval --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval",
+  "retrieval": {
+    "metrics_file": "data/monitoring/rag_eval_metrics.json",
+    "min": {
+      "hit_rate_at_k": 0.85,
+      "mrr": 0.65
+    }
+  },
+  "generation": {
+    "metrics_file": "data/monitoring/generation_eval_metrics.json",
+    "min": {
+      "gen_eval_mean_faithfulness": 0.55,
+      "gen_eval_grounded_rate": 0.8,
+      "gen_eval_mean_expected_coverage": 0.75,
+      "gen_eval_mean_answer_relevance": 0.8,
+      "gen_eval_mean_citation_coverage": 0.45
+    },
+    "max": {
+      "gen_eval_refusal_rate": 0.2
+    }
+  }
+}

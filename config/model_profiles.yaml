@@ -1,0 +1,135 @@
+profiles:
+  extractive_baseline:
+    description: "Deterministic grounded writer for tests, CI, and fallback operation."
+    role: fallback
+    provider: extractive
+    model_name: grounded-extractive-v1
+    context_window: 8192
+    max_new_tokens: 512
+    quantization: none
+    local_files_only: true
+    recommended_for:
+      - tests
+      - CI
+      - offline demos
+
+  qwen3_8b_default:
+    description: "Default local instruct model profile for QA, summaries, and normal RAG answers."
+    role: default
+    provider: huggingface
+    model_name: Qwen/Qwen3-8B
+    context_window: 32768
+    max_new_tokens: 1024
+    quantization: bf16_or_4bit
+    local_files_only: true
+    recommended_for:
+      - document QA
+      - summaries
+      - general report drafting
+      - local GPU serving
+    serving:
+      transformers: true
+      vllm: true
+      suggested_gpu_memory_gb: 24
+
+  deepseek_r1_distill_qwen_14b_reasoning:
+    description: "Reasoning-specialist profile for verifier, planner, and harder synthesis tasks."
+    role: reasoning
+    provider: huggingface
+    model_name: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+    context_window: 32768
+    max_new_tokens: 2048
+    quantization: bf16_or_4bit
+    local_files_only: true
+    recommended_for:
+      - evidence verification
+      - claim checking
+      - agent planning
+      - multi-step reasoning
+    serving:
+      transformers: true
+      vllm: true
+      suggested_gpu_memory_gb: 40
+
+  deepseek_r1_distill_qwen_32b_stretch:
+    description: "Stretch local profile for high-quality reasoning benchmarks on a 40 GB GPU with quantization."
+    role: stretch
+    provider: openai_compatible
+    model_name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+    context_window: 32768
+    max_new_tokens: 2048
+    quantization: 4bit_or_awq
+    local_files_only: true
+    recommended_for:
+      - benchmark mode
+      - high-quality report synthesis
+      - difficult comparisons
+    serving:
+      vllm: true
+      sglang: true
+      endpoint_env: ADIP_OPENAI_BASE_URL
+      api_key_env: ADIP_OPENAI_API_KEY
+      suggested_gpu_memory_gb: 40
+
+  deepseek_v4_flash_cloud:
+    description: "Cloud/API profile for fast DeepSeek document QA and report drafting."
+    role: cloud_default
+    provider: openai_compatible
+    model_name: deepseek-v4-flash
+    context_window: 128000
+    max_new_tokens: 4096
+    quantization: provider_managed
+    local_files_only: false
+    recommended_for:
+      - cloud document QA
+      - fast cloud summaries
+      - API smoke tests
+    serving:
+      endpoint_env: DEEPSEEK_BASE_URL
+      endpoint_url: https://api.deepseek.com/chat/completions
+      api_key_env: DEEPSEEK_API_KEY
+      extra_body:
+        thinking:
+          type: disabled
+
+  deepseek_v4_pro_cloud:
+    description: "Cloud/API benchmark profile for frontier DeepSeek reasoning and agentic behavior."
+    role: cloud_reasoning
+    provider: openai_compatible
+    model_name: deepseek-v4-pro
+    context_window: 128000
+    max_new_tokens: 4096
+    quantization: provider_managed
+    local_files_only: false
+    recommended_for:
+      - cloud benchmark
+      - agentic comparison
+      - long-context evaluation
+    serving:
+      endpoint_env: DEEPSEEK_BASE_URL
+      endpoint_url: https://api.deepseek.com/chat/completions
+      api_key_env: DEEPSEEK_API_KEY
+      extra_body:
+        thinking:
+          type: enabled
+        reasoning_effort: high
+
+  deepseek_v3_2_cloud_benchmark:
+    description: "Legacy cloud/API benchmark alias retained for old experiment configs."
+    role: legacy_cloud_benchmark
+    provider: openai_compatible
+    model_name: deepseek-v4-pro
+    context_window: 128000
+    max_new_tokens: 4096
+    quantization: provider_managed
+    local_files_only: false
+    recommended_for:
+      - legacy experiment replay
+    serving:
+      endpoint_env: DEEPSEEK_BASE_URL
+      endpoint_url: https://api.deepseek.com/chat/completions
+      api_key_env: DEEPSEEK_API_KEY
+      extra_body:
+        thinking:
+          type: enabled
+        reasoning_effort: high

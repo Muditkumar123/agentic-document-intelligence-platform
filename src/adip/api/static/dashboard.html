@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agentic Document Intelligence</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+    />
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    ></script>
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260622-md6" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Document Intelligence</p>
+        <h1>Agentic Document Intelligence</h1>
+      </div>
+      <div class="status" id="serviceStatus">Checking</div>
+    </header>
+
+    <main>
+      <section class="metric-band" aria-label="Retrieval benchmark">
+        <div class="metric">
+          <span>Plain Backend</span>
+          <strong id="bestBackend">-</strong>
+        </div>
+        <div class="metric">
+          <span>Best Variant</span>
+          <strong id="bestVariant">-</strong>
+        </div>
+        <div class="metric">
+          <span>TF-IDF MRR</span>
+          <strong id="tfidfMrr">-</strong>
+        </div>
+        <div class="metric">
+          <span>Cross MRR</span>
+          <strong id="crossMrr">-</strong>
+        </div>
+      </section>
+
+      <section class="metric-band" aria-label="Answer quality evaluation">
+        <div class="metric">
+          <span>Faithfulness</span>
+          <strong id="genFaithfulness">-</strong>
+        </div>
+        <div class="metric">
+          <span>Grounded Rate</span>
+          <strong id="genGroundedRate">-</strong>
+        </div>
+        <div class="metric">
+          <span>Expected Coverage</span>
+          <strong id="genExpectedCoverage">-</strong>
+        </div>
+        <div class="metric">
+          <span>Answer Citations</span>
+          <strong id="genCitationCoverage">-</strong>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="control-panel">
+          <div class="mode-tabs" role="tablist" aria-label="Workflow mode">
+            <button class="mode-tab active" type="button" data-mode="rag">RAG</button>
+            <button class="mode-tab" type="button" data-mode="agent">Agent</button>
+            <button class="mode-tab" type="button" data-mode="index">Index</button>
+            <button class="mode-tab" type="button" data-mode="history">History</button>
+          </div>
+
+          <form class="workflow-form" id="ragForm" data-mode-panel="rag">
+            <label>
+              Question
+              <textarea id="ragQuestion" rows="4">What does the platform do with documents?</textarea>
+            </label>
+            <label>
+              Index Path
+              <input id="ragIndexPath" value="data/processed/vector_index" />
+            </label>
+            <label>
+              Target Document
+              <select id="ragDocumentFilter">
+                <option value="">All Indexed Documents</option>
+              </select>
+            </label>
+            <div class="split-fields">
+              <label>
+                Top K
+                <input id="ragTopK" type="number" min="1" value="3" />
+              </label>
+              <label>
+                Candidate K
+                <input id="ragCandidateK" type="number" min="1" value="10" />
+              </label>
+            </div>
+            <label>
+              Reranker
+              <select id="ragReranker">
+                <option value="none">None</option>
+                <option value="lexical" selected>Lexical</option>
+                <option value="cross_encoder">Cross Encoder</option>
+              </select>
+            </label>
+            <label class="checkbox-row">
+              <input id="allowRerankerDownload" type="checkbox" />
+              <span>Allow reranker download</span>
+            </label>
+            <button class="primary-action" type="submit">
+              <span class="button-icon">Q</span>
+              Run Query
+            </button>
+          </form>
+
+          <form class="workflow-form hidden" id="agentForm" data-mode-panel="agent">
+            <label>
+              Question
+              <textarea id="agentQuestion" rows="4">Create a research brief about the document intelligence platform.</textarea>
+            </label>
+            <label>
+              Index Path
+              <input id="agentIndexPath" value="data/processed/vector_index" />
+            </label>
+            <label>
+              Target Document
+              <select id="agentDocumentFilter">
+                <option value="">All Indexed Documents</option>
+              </select>
+            </label>
+            <div class="split-fields">
+              <label>
+                Task
+                <select id="agentTask">
+                  <option value="auto">Auto</option>
+                  <option value="qa">QA</option>
+                  <option value="brief" selected>Brief</option>
+                </select>
+              </label>
+              <label>
+                Domain
+                <select id="agentDomain">
+                  <option value="general">General</option>
+                  <option value="academic" selected>Academic</option>
+                  <option value="finance">Finance</option>
+                  <option value="legal">Legal</option>
+                  <option value="technical">Technical</option>
+                  <option value="crypto">Crypto</option>
+                </select>
+              </label>
+            </div>
+            <div class="split-fields">
+              <label>
+                Writer Model
+                <select id="agentModelProfile">
+                  <option value="extractive_baseline">Extractive Baseline</option>
+                  <option value="qwen3_8b_default">Qwen3 8B</option>
+                  <option value="deepseek_r1_distill_qwen_14b_reasoning">DeepSeek 14B</option>
+                </select>
+              </label>
+              <label>
+                Writer Device
+                <select id="agentDevice">
+                  <option value="cuda:1" selected>CUDA 1</option>
+                  <option value="cuda:0">CUDA 0</option>
+                  <option value="cpu">CPU</option>
+                </select>
+              </label>
+            </div>
+            <div class="model-buttons" id="writerModelButtons" aria-label="Writer model shortcuts"></div>
+            <div class="split-fields">
+              <label>
+                Top K
+                <input id="agentTopK" type="number" min="1" value="3" />
+              </label>
+              <label>
+                Max Tokens
+                <input id="agentMaxTokens" type="number" min="1" value="4096" />
+              </label>
+            </div>
+            <label>
+              Writer Thinking
+              <select id="agentReasoningEffort">
+                <option value="auto">Auto (provider default)</option>
+                <option value="none">Off — best for Gemini answers</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <label>
+              Reasoning Model
+              <select id="reasoningModelProfile">
+                <option value="">None</option>
+                <option value="deepseek_r1_distill_qwen_14b_reasoning">DeepSeek 14B</option>
+                <option value="qwen3_8b_default">Qwen3 8B</option>
+                <option value="extractive_baseline">Extractive Baseline</option>
+              </select>
+            </label>
+            <div class="model-buttons" id="reasoningModelButtons" aria-label="Reasoning model shortcuts"></div>
+            <div class="api-key-status" id="apiKeyStatus">Model runtime: checking</div>
+            <div class="split-fields">
+              <label>
+                API Endpoint
+                <input id="agentEndpointUrl" autocomplete="off" placeholder="Profile default" />
+              </label>
+              <label>
+                API Key
+                <input id="agentApiKey" type="password" autocomplete="off" placeholder="Session key" />
+              </label>
+            </div>
+            <section class="custom-model-panel" aria-label="Add model">
+              <h3>Add Model</h3>
+              <label>
+                Model Label
+                <input id="customModelLabel" autocomplete="off" placeholder="My API model" />
+              </label>
+              <label>
+                Model API Name
+                <input id="customModelName" autocomplete="off" placeholder="deepseek-v4-flash" />
+              </label>
+              <div class="split-fields">
+                <label>
+                  Model API Endpoint
+                  <input id="customModelEndpoint" autocomplete="off" placeholder="https://api.deepseek.com/chat/completions" />
+                </label>
+                <label>
+                  Model API Key
+                  <input id="customModelApiKey" type="password" autocomplete="off" placeholder="Session key" />
+                </label>
+              </div>
+              <div class="split-fields">
+                <button class="secondary-action" id="testCustomModel" type="button">
+                  <span class="button-icon">T</span>
+                  Test Model
+                </button>
+                <button class="secondary-action" id="addCustomModel" type="button">
+                  <span class="button-icon">+</span>
+                  Add Model
+                </button>
+              </div>
+              <div class="form-status" id="customModelStatus">Session-only model, not saved to disk.</div>
+            </section>
+            <div class="split-fields">
+              <label>
+                Reasoning Device
+                <select id="reasoningDevice">
+                  <option value="cuda:1" selected>CUDA 1</option>
+                  <option value="cuda:0">CUDA 0</option>
+                  <option value="cpu">CPU</option>
+                </select>
+              </label>
+              <label>
+                Reasoning Tokens
+                <input id="reasoningMaxTokens" type="number" min="1" value="256" />
+              </label>
+            </div>
+            <label class="checkbox-row">
+              <input id="useReasoningPlanner" type="checkbox" />
+              <span>Use reasoning model for planning</span>
+            </label>
+            <button class="primary-action" type="submit">
+              <span class="button-icon">A</span>
+              Run Agent
+            </button>
+          </form>
+
+          <form class="workflow-form hidden" id="indexForm" data-mode-panel="index">
+            <label>
+              Upload Document
+              <input id="documentUpload" type="file" accept=".pdf,.md,.txt" />
+            </label>
+            <div class="split-fields">
+              <button class="secondary-action" id="uploadDocument" type="button">
+                <span class="button-icon">U</span>
+                Upload
+              </button>
+              <button class="secondary-action" id="uploadAndRebuild" type="button">
+                <span class="button-icon">B</span>
+                Upload + Rebuild
+              </button>
+            </div>
+            <label>
+              Input Path
+              <input id="inputPath" value="data/raw" />
+            </label>
+            <label>
+              Chunks Path
+              <input id="chunksPath" value="data/processed/chunks.jsonl" />
+            </label>
+            <label>
+              Index Path
+              <input id="indexPath" value="data/processed/vector_index" />
+            </label>
+            <div class="split-fields">
+              <label>
+                Backend
+                <select id="indexBackend">
+                  <option value="tfidf" selected>TF-IDF</option>
+                  <option value="dense">Dense LSA</option>
+                </select>
+              </label>
+              <label>
+                Chunk Size
+                <input id="chunkSize" type="number" min="1" value="800" />
+              </label>
+            </div>
+            <label>
+              Chunk Overlap
+              <input id="chunkOverlap" type="number" min="0" value="120" />
+            </label>
+            <button class="primary-action" type="submit">
+              <span class="button-icon">B</span>
+              Rebuild Index
+            </button>
+          </form>
+
+          <section class="workflow-form hidden" id="historyPanel" data-mode-panel="history">
+            <label>
+              Limit
+              <input id="historyLimit" type="number" min="1" value="12" />
+            </label>
+            <div class="split-fields">
+              <button class="secondary-action" id="refreshAgentHistory" type="button">
+                <span class="button-icon">T</span>
+                Agent Traces
+              </button>
+              <button class="secondary-action" id="refreshMlopsHistory" type="button">
+                <span class="button-icon">M</span>
+                MLOps Runs
+              </button>
+            </div>
+            <div>
+              <h3>AgentOps Traces</h3>
+              <div class="history-list" id="agentHistoryList"></div>
+            </div>
+            <div>
+              <h3>MLOps Runs</h3>
+              <div class="history-list" id="mlopsHistoryList"></div>
+            </div>
+          </section>
+        </aside>
+
+        <section class="result-panel" aria-live="polite">
+          <div class="result-header">
+            <div>
+              <p class="eyebrow">Run Output</p>
+              <h2 id="resultTitle">Ready</h2>
+            </div>
+            <div class="result-actions">
+              <div class="latency" id="latencyValue">- ms</div>
+              <button class="secondary-action compact-action" id="exportReport" type="button">
+                Export
+              </button>
+            </div>
+          </div>
+
+          <div class="answer-block">
+            <h3>Answer</h3>
+            <div id="answerWarning" class="answer-warning" role="status" hidden></div>
+            <div id="answerText" class="answer-body">Run a workflow to populate the answer.</div>
+          </div>
+
+          <section class="quality-block" aria-label="Answer quality">
+            <h3>Quality</h3>
+            <div class="quality-grid" id="qualityGrid"></div>
+          </section>
+
+          <div class="two-column">
+            <div>
+              <h3>Citations</h3>
+              <div class="citation-list" id="citationList"></div>
+            </div>
+            <div>
+              <h3>Trace</h3>
+              <div class="trace-list" id="traceList"></div>
+            </div>
+          </div>
+
+          <details class="raw-block">
+            <summary>Raw JSON</summary>
+            <pre id="rawJson">{}</pre>
+          </details>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/dashboard.js?v=20260622-md6" defer></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+You are a planning specialist for an agentic document intelligence workflow.
+
+Create a short execution plan for the user request.
+The plan should decide what to retrieve, what to verify, and what the writer should produce.
+Do not invent document facts before retrieval.
+
+User request:
+{{ question }}
+
+Domain preset:
+{{ domain_preset }}
+
+Focus areas:
+{{ focus_areas }}
+
+Return 3 to 5 numbered steps.

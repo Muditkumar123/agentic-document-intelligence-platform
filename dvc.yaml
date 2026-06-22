@@ -1,0 +1,60 @@
+stages:
+  ingest:
+    cmd: PYTHONPATH=src python -m adip.mlops.run_ingestion --input data/raw --output data/processed/chunks.jsonl --chunk-size ${ingestion.chunk_size} --chunk-overlap ${ingestion.chunk_overlap} --metrics-output data/monitoring/ingestion_metrics.json
+    deps:
+      - data/raw
+      - src/adip/ingestion
+      - src/adip/mlops
+    outs:
+      - data/processed/chunks.jsonl
+    metrics:
+      - data/monitoring/ingestion_metrics.json
+
+  rag_eval:
+    cmd: PYTHONPATH=src python -m adip.mlops.run_rag_eval --chunks data/processed/chunks.jsonl --index data/processed/vector_index --golden data/reference/golden_qa.jsonl --backend ${rag.backend} --ngram-max ${rag.ngram_max} --embedding-model ${rag.embedding_model} --dense-dimensions ${rag.dense_dimensions} --top-k ${rag.top_k} --candidate-k ${rag.candidate_k} --reranker ${rag.reranker} --rerank-weight ${rag.rerank_weight} --metrics-output data/monitoring/rag_eval_metrics.json
+    deps:
+      - data/processed/chunks.jsonl
+      - data/reference/golden_qa.jsonl
+      - src/adip/rag
+      - src/adip/mlops
+    outs:
+      - data/processed/vector_index
+    metrics:
+      - data/monitoring/rag_eval_metrics.json
+
+  retrieval_benchmark:
+    cmd: PYTHONPATH=src python -m adip.mlops.run_retrieval_benchmark --chunks data/processed/chunks.jsonl --index-root data/processed/retrieval_benchmark --golden data/reference/golden_qa.jsonl --backends ${retrieval_benchmark.backends} --rerankers ${retrieval_benchmark.rerankers} --embedding-model ${retrieval_benchmark.embedding_model} --dense-dimensions ${retrieval_benchmark.dense_dimensions} --top-k ${retrieval_benchmark.top_k} --candidate-k ${retrieval_benchmark.candidate_k} --rerank-weight ${retrieval_benchmark.rerank_weight} --cross-encoder-model ${retrieval_benchmark.cross_encoder_model} --cross-encoder-batch-size ${retrieval_benchmark.cross_encoder_batch_size} --allow-reranker-download --report-output data/monitoring/retrieval_benchmark_report.json --metrics-output data/monitoring/retrieval_benchmark_metrics.json
+    deps:
+      - data/processed/chunks.jsonl
+      - data/reference/golden_qa.jsonl
+      - src/adip/rag
+      - src/adip/mlops
+    outs:
+      - data/processed/retrieval_benchmark
+    metrics:
+      - data/monitoring/retrieval_benchmark_metrics.json
+
+  llmops_smoke:
+    cmd: PYTHONPATH=src python -m adip.mlops.run_llmops_smoke --index data/processed/vector_index --question "${llmops_smoke.question}" --task ${llmops_smoke.task} --domain ${llmops_smoke.domain} --top-k ${llmops_smoke.top_k} --model-profile ${llmops_smoke.model_profile} --metrics-output data/monitoring/llmops_smoke_metrics.json --report-output data/monitoring/llmops_smoke_report.json
+    deps:
+      - data/processed/vector_index
+      - config/model_profiles.yaml
+      - prompts
+      - src/adip/llmops
+      - src/adip/rag
+      - src/adip/mlops
+    metrics:
+      - data/monitoring/llmops_smoke_metrics.json
+
+  agent_smoke:
+    cmd: PYTHONPATH=src python -m adip.mlops.run_agent --index data/processed/vector_index --question "${agent_smoke.question}" --task ${agent_smoke.task} --domain ${agent_smoke.domain} --top-k ${agent_smoke.top_k} --model-profile ${agent_smoke.model_profile} --metrics-output data/monitoring/agent_smoke_metrics.json
+    deps:
+      - data/processed/vector_index
+      - config/model_profiles.yaml
+      - prompts
+      - src/adip/agents
+      - src/adip/llmops
+      - src/adip/rag
+      - src/adip/mlops
+    metrics:
+      - data/monitoring/agent_smoke_metrics.json
