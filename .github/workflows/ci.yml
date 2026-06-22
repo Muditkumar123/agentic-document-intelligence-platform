@@ -46,16 +46,14 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install system deps (pdftotext for PDF ingestion)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - name: Install package
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,api]"
-      - name: Ingest corpus
+      - name: Ingest evaluation corpus (real public docs, markdown-only)
         run: >-
           python -m adip.mlops.run_ingestion
-          --input data/raw
+          --input data/eval/raw
           --output data/processed/chunks.jsonl
           --chunk-size 800 --chunk-overlap 120
           --metrics-output data/monitoring/ingestion_metrics.json
@@ -64,14 +62,14 @@ jobs:
           python -m adip.mlops.run_rag_eval
           --chunks data/processed/chunks.jsonl
           --index data/processed/vector_index
-          --golden data/reference/golden_qa.jsonl
+          --golden data/eval/golden_qa.jsonl
           --backend tfidf --no-faiss --reranker none --top-k 5
           --metrics-output data/monitoring/rag_eval_metrics.json
       - name: Generation eval (deterministic extractive writer)
         run: >-
           python -m adip.mlops.run_generation_eval
           --index data/processed/vector_index
-          --golden data/reference/golden_qa.jsonl
+          --golden data/eval/golden_qa.jsonl
           --metrics-output data/monitoring/generation_eval_metrics.json
           --report-output data/monitoring/generation_eval_report.json
       - name: Enforce eval thresholds

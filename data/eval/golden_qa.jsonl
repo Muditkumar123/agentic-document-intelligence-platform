@@ -1,0 +1,45 @@
+{"question": "What are the principles for processing personal data under the GDPR?", "expected_substrings": ["lawfulness, fairness and transparency", "data minimisation"], "category": "legal"}
+{"question": "Which GDPR principle limits how long personal data may be kept?", "expected_substrings": ["storage limitation", "no longer than is necessary"], "category": "legal"}
+{"question": "Under the GDPR, what is the right to be forgotten?", "expected_substrings": ["right to be forgotten", "erasure of personal data"], "category": "legal"}
+{"question": "On what grounds can a data subject demand erasure of their personal data?", "expected_substrings": ["no longer necessary", "withdraws consent"], "category": "legal"}
+{"question": "When must a controller report a personal data breach to the supervisory authority?", "expected_substrings": ["72 hours", "personal data breach"], "category": "legal"}
+{"question": "How quickly must an organisation notify regulators after discovering a data breach?", "expected_substrings": ["72 hours"], "category": "legal"}
+{"question": "Which category of AI systems does the EU AI Act prohibit outright?", "expected_substrings": ["Unacceptable risk", "prohibited"], "category": "legal"}
+{"question": "What transparency obligation does the EU AI Act place on chatbots and deepfakes?", "expected_substrings": ["aware that they are interacting with AI"], "category": "legal"}
+{"question": "What compute threshold triggers systemic-risk rules for general-purpose AI models in the EU AI Act?", "expected_substrings": ["10^25 FLOPs", "systemic risk"], "category": "legal"}
+{"question": "What obligations does the EU AI Act impose on high-risk AI systems?", "expected_substrings": ["risk-management systems", "human oversight"], "category": "legal"}
+{"question": "What architecture did 'Attention Is All You Need' propose?", "expected_substrings": ["the Transformer", "based solely on attention mechanisms"], "category": "academic"}
+{"question": "Which model dispenses with recurrence and convolutions entirely?", "expected_substrings": ["dispensing with recurrence and convolutions entirely"], "category": "academic"}
+{"question": "What BLEU score did the Transformer reach on WMT 2014 English-to-French translation?", "expected_substrings": ["41.8"], "category": "academic"}
+{"question": "What does BERT stand for and how is it pre-trained?", "expected_substrings": ["Bidirectional Encoder Representations from Transformers", "left and right context"], "category": "academic"}
+{"question": "Which language model pushed the GLUE score to 80.5%?", "expected_substrings": ["BERT", "80.5%"], "category": "academic"}
+{"question": "How does residual learning ease the training of very deep networks?", "expected_substrings": ["residual learning framework", "residual functions with reference to the layer inputs"], "category": "academic"}
+{"question": "How many layers deep was the ResNet evaluated on ImageNet?", "expected_substrings": ["152 layers"], "category": "academic"}
+{"question": "Which optimizer is based on adaptive estimates of lower-order moments?", "expected_substrings": ["Adam", "adaptive estimates of lower-order moments"], "category": "academic"}
+{"question": "Which optimization method is invariant to diagonal rescaling of the gradients?", "expected_substrings": ["Adam", "invariant to diagonal rescaling of the gradients"], "category": "academic"}
+{"question": "In an RFC, what does the keyword MUST mean?", "expected_substrings": ["absolute requirement of the specification"], "category": "technical"}
+{"question": "What requirement level does the word RECOMMENDED correspond to in RFC 2119?", "expected_substrings": ["RECOMMENDED", "valid reasons in particular circumstances"], "category": "technical"}
+{"question": "Which HTTP request methods are considered safe?", "expected_substrings": ["GET, HEAD, OPTIONS, and TRACE", "read-only"], "category": "technical"}
+{"question": "What does it mean for an HTTP method to be idempotent, and is POST idempotent?", "expected_substrings": ["idempotent", "POST is neither safe nor idempotent"], "category": "technical"}
+{"question": "What does the TLS protocol protect against for applications communicating over the Internet?", "expected_substrings": ["eavesdropping, tampering, and message forgery"], "category": "technical"}
+{"question": "How does TLS 1.3 guard against protocol version downgrade attacks?", "expected_substrings": ["downgrade protection", "random value"], "category": "technical"}
+{"question": "What is the maximum length of a full domain name in the DNS?", "expected_substrings": ["255 octets"], "category": "technical"}
+{"question": "What is the maximum size of a single DNS label?", "expected_substrings": ["63 octets"], "category": "technical"}
+{"question": "What is the stated goal of domain names according to RFC 1035?", "expected_substrings": ["naming resources", "usable in different hosts"], "category": "technical"}
+{"question": "What are the six core functions of the NIST Cybersecurity Framework 2.0?", "expected_substrings": ["Govern", "Identify", "Protect", "Detect", "Respond", "Recover"], "category": "security"}
+{"question": "Which function was newly added in NIST CSF 2.0?", "expected_substrings": ["Govern", "added in CSF 2.0"], "category": "security"}
+{"question": "Which NIST cybersecurity function covers restoring operations after an incident?", "expected_substrings": ["Recover", "restore assets and operations"], "category": "security"}
+{"question": "What are the four core functions of the NIST AI Risk Management Framework?", "expected_substrings": ["Govern", "Map", "Measure", "Manage"], "category": "security"}
+{"question": "In the NIST AI RMF, which function recognizes context and identifies related risks?", "expected_substrings": ["Map", "context is recognized"], "category": "security"}
+{"question": "Which NIST AI RMF function cultivates a culture of risk management?", "expected_substrings": ["Govern", "culture of risk management"], "category": "security"}
+{"question": "How does NIST SP 800-207 define zero trust?", "expected_substrings": ["least privilege per-request access decisions", "network viewed as compromised"], "category": "security"}
+{"question": "What assumption does zero trust make about a user's network location?", "expected_substrings": ["no implicit trust", "physical or network location"], "category": "security"}
+{"question": "What is the SEC Form 10-K?", "expected_substrings": ["annual report on Form 10-K", "audited financial statements"], "category": "finance"}
+{"question": "What sections does a Form 10-K typically include?", "expected_substrings": ["risk factors", "management's discussion and analysis"], "category": "finance"}
+{"question": "Which investment strategy is summed up as not putting all your eggs in one basket?", "expected_substrings": ["Diversification", "Don't put all your eggs in one basket"], "category": "finance"}
+{"question": "How does diversification reduce investment risk?", "expected_substrings": ["spreading money among various investments", "do not move up and down at the same time"], "category": "finance"}
+{"question": "What is a mutual fund?", "expected_substrings": ["open-end investment company that pools money from many investors"], "category": "finance"}
+{"question": "What does a single share in a mutual fund represent?", "expected_substrings": ["part ownership of the mutual fund's portfolio"], "category": "finance"}
+{"question": "Which document defines requirement levels using the words MUST, SHOULD, and MAY?", "expected_substrings": ["absolute requirement of the specification"], "category": "technical"}
+{"question": "What does the GDPR's 72-hour rule require?", "expected_substrings": ["72 hours", "notify the personal data breach"], "category": "legal"}
+{"question": "Which NIST framework function restores assets impaired by a cybersecurity incident?", "expected_substrings": ["Recover", "restore assets and operations"], "category": "security"}

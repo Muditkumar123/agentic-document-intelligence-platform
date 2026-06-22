@@ -11,13 +11,14 @@ CI turns the project's deterministic evaluations into automated regression gates
 
 ### 2. `eval-gate` — answer-quality regression gate
 
-Runs only after `test` passes, and reproduces the evaluation pipeline end to end on a clean machine:
+Runs only after `test` passes, and reproduces the evaluation pipeline end to end on a clean machine, against the **real public-document evaluation corpus** (`data/eval/`, markdown-only — no system PDF tooling needed):
 
-1. Installs `poppler-utils` (the `pdftotext` binary the ingestion PDF parser shells out to).
-2. **Ingestion** — `run_ingestion` parses `data/raw/` into `data/processed/chunks.jsonl`.
-3. **Retrieval eval** — `run_rag_eval` builds a TF-IDF index (`--no-faiss`, no reranker, hermetic) and writes `data/monitoring/rag_eval_metrics.json` with `hit_rate_at_k` and `mrr`.
-4. **Generation eval** — `run_generation_eval` answers the golden questions with the deterministic extractive writer and writes `data/monitoring/generation_eval_metrics.json` with the `gen_eval_*` metrics.
-5. **Gate** — `eval_gate` compares those metrics against [`ci/eval_thresholds.json`](../ci/eval_thresholds.json) and exits non-zero if any check fails.
+1. **Ingestion** — `run_ingestion` parses `data/eval/raw/` (18 real public docs across 5 categories) into `data/processed/chunks.jsonl`.
+2. **Retrieval eval** — `run_rag_eval` builds a TF-IDF index (`--no-faiss`, no reranker, hermetic) over the corpus, scored against `data/eval/golden_qa.jsonl` (45 questions), and writes `data/monitoring/rag_eval_metrics.json` with `hit_rate_at_k`, `mrr`, and per-category slices.
+3. **Generation eval** — `run_generation_eval` answers the golden questions with the deterministic extractive writer and writes `data/monitoring/generation_eval_metrics.json` with the `gen_eval_*` metrics.
+4. **Gate** — `eval_gate` compares those metrics against [`ci/eval_thresholds.json`](../ci/eval_thresholds.json) and exits non-zero if any check fails.
+
+See [EVALUATION_DATASET.md](EVALUATION_DATASET.md) for the corpus, sources, and licensing. Retrieval is saturated (1.0) on this lexically-distinct corpus, so the discriminating gate is generation faithfulness.
 
 The metric JSON files are uploaded as build artifacts (even on failure) for inspection.
 
@@ -29,15 +30,17 @@ Both evals use deterministic components — TF-IDF retrieval and the extractive 
 
 Floors (`min`) and a ceiling (`max`) are set with margin around the measured baseline so ordinary corpus tweaks pass but genuine regressions fail:
 
+Measured on the real public-document corpus (`data/eval/`):
+
 | Group | Metric | Bound | Threshold | Baseline |
 | --- | --- | --- | --- | --- |
 | retrieval | `hit_rate_at_k` | min | 0.85 | 1.00 |
-| retrieval | `mrr` | min | 0.65 | 0.767 |
-| generation | `gen_eval_mean_faithfulness` | min | 0.55 | 0.679 |
-| generation | `gen_eval_grounded_rate` | min | 0.80 | 1.00 |
-| generation | `gen_eval_mean_expected_coverage` | min | 0.75 | 0.90 |
+| retrieval | `mrr` | min | 0.80 | 1.00 |
+| generation | `gen_eval_mean_faithfulness` | min | 0.45 | 0.595 |
+| generation | `gen_eval_grounded_rate` | min | 0.80 | 0.956 |
+| generation | `gen_eval_mean_expected_coverage` | min | 0.65 | 0.795 |
 | generation | `gen_eval_mean_answer_relevance` | min | 0.80 | 1.00 |
-| generation | `gen_eval_mean_citation_coverage` | min | 0.45 | 0.61 |
+| generation | `gen_eval_mean_citation_coverage` | min | 0.55 | 0.767 |
 | generation | `gen_eval_refusal_rate` | max | 0.20 | 0.00 |
 
 A metric that is missing or non-numeric in the report is treated as a **failure** (`MISSING`), so a renamed or dropped metric cannot silently disable a gate.
@@ -45,9 +48,13 @@ A metric that is missing or non-numeric in the report is treated as a **failure*
 ## Run The Gate Locally
 
 ```bash
+conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_ingestion \
+  --input data/eval/raw --output data/processed/chunks.jsonl
 conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_rag_eval \
-  --backend tfidf --no-faiss --reranker none --top-k 5
-conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_eval
+  --chunks data/processed/chunks.jsonl --index data/processed/vector_index \
+  --golden data/eval/golden_qa.jsonl --backend tfidf --no-faiss --reranker none --top-k 5
+conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_eval \
+  --index data/processed/vector_index --golden data/eval/golden_qa.jsonl
 conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.eval_gate \
   --thresholds ci/eval_thresholds.json
 ```

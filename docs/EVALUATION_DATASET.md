@@ -30,6 +30,31 @@ Each row contains:
 
 Expected substrings are used instead of fixed chunk IDs because chunk IDs are checksum-based and change when source documents change.
 
+## Real Public-Document Evaluation Corpus (CI quality gate)
+
+The original corpus above (`data/raw/` + `data/reference/golden_qa.jsonl`) is small and project-authored, which made `hit_rate@k = 1.0` look potentially overfit. To make the metrics credible, the **CI quality gate** runs against a separate, fixed corpus of **real, externally authored public documents**:
+
+- Corpus: `data/eval/raw/` — **18 documents across 5 categories** (legal, academic, technical, security, finance).
+- Golden set: `data/eval/golden_qa.jsonl` — **45 questions**, each tagged with a `category`, including direct, synonym/paraphrase, and cross-cutting hard-negative questions.
+- Sources & licensing: every document is a short excerpt from a genuine public source (GDPR / EU AI Act legal text, IETF RFCs, NIST publications, SEC / Investor.gov, arXiv abstracts), documented with URL and license in [`data/eval/SOURCES.md`](../data/eval/SOURCES.md). NIST/SEC are U.S. Government public-domain works; RFCs are reproducible under IETF Trust terms; legal texts are reusable with attribution.
+
+This separation follows the principle that `data/raw/` is the **demo / user-upload** corpus, while `data/eval/` is the **fixed evaluation** corpus the gate is measured against.
+
+**Measured baseline (TF-IDF, no faiss, no rerank, deterministic extractive writer):**
+
+| Metric | Value |
+| --- | --- |
+| Retrieval hit_rate@k / MRR | 1.00 / 1.00 |
+| Generation faithfulness | 0.595 |
+| Generation grounded rate | 0.956 |
+| Generation expected coverage | 0.795 |
+| Generation citation coverage | 0.767 |
+| Generation refusal rate | 0.000 |
+
+**Honest reading of retrieval = 1.0:** the five domains are lexically distinct (GDPR vs RFC vs SEC vocabularies barely overlap), so TF-IDF separates them trivially and hit_rate stays 1.0 even per-category. That is an honest property of a clean corpus, not overfitting — so retrieval is treated as a smoke test, and the **discriminating gate lives in generation faithfulness (0.595)**, which varies and does not saturate. The retrieval *ranking* discrimination story is carried by the separate cross-encoder reranking benchmark on the hard-negative dataset (MRR 0.733 → 0.900).
+
+The retrieval report also includes per-category slices `hit_rate_by_category` and `mrr_by_category` for diagnosis (the gate enforces robust overall aggregates, not noisy per-category numbers).
+
 ## What The Dataset Tests
 
 - Whether the retriever can find project overview evidence.
@@ -96,7 +121,7 @@ The same golden set drives answer-quality (generation) evaluation, not just retr
 - expected coverage (did the answer surface the row's `expected_substrings`),
 - citation coverage.
 
-It is deterministic with the extractive baseline, so the numbers are reproducible in CI, and any hosted or local writer can be swapped in for model comparisons. On the current set the baseline scores about 0.68 faithfulness, 1.0 grounded rate, and 0.9 expected coverage. The latest report is exposed at `GET /monitoring/generation-eval` and on the dashboard's Answer Quality tiles.
+It is deterministic with the extractive baseline, so the numbers are reproducible in CI, and any hosted or local writer can be swapped in for model comparisons. On the **real public-document corpus** (`data/eval/`) the baseline scores about 0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage — see the table above. The latest report is exposed at `GET /monitoring/generation-eval` and on the dashboard's Answer Quality tiles.
 
 ## Interview Talking Point
 

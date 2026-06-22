@@ -1,20 +1,20 @@
 {
-  "_comment": "CI quality-gate thresholds. Floors (min) and ceilings (max) are set with margin below/above the measured deterministic baseline so normal corpus tweaks pass but real regressions fail the build. Baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 0.767, faithfulness 0.679, grounded_rate 1.0, expected_coverage 0.9, answer_relevance 1.0, citation_coverage 0.61, refusal_rate 0.0. Regenerate the metric files with: python -m adip.mlops.run_rag_eval --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval",
+  "_comment": "CI quality-gate thresholds, measured on the REAL public-document eval corpus (data/eval/raw, 18 docs across 5 categories; data/eval/golden_qa.jsonl, 45 questions). Floors (min) and the refusal ceiling (max) sit with margin around the measured deterministic baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 1.0, faithfulness 0.595, grounded_rate 0.956, expected_coverage 0.795, answer_relevance 1.0, citation_coverage 0.767, refusal_rate 0.0. Retrieval is saturated because the corpus is lexically distinct across domains; the discriminating gate is generation faithfulness. Regenerate metrics with: python -m adip.mlops.run_rag_eval --chunks data/processed/chunks.jsonl --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval --index data/processed/vector_index --golden data/eval/golden_qa.jsonl",
   "retrieval": {
     "metrics_file": "data/monitoring/rag_eval_metrics.json",
     "min": {
       "hit_rate_at_k": 0.85,
-      "mrr": 0.65
+      "mrr": 0.8
     }
   },
   "generation": {
     "metrics_file": "data/monitoring/generation_eval_metrics.json",
     "min": {
-      "gen_eval_mean_faithfulness": 0.55,
+      "gen_eval_mean_faithfulness": 0.45,
       "gen_eval_grounded_rate": 0.8,
-      "gen_eval_mean_expected_coverage": 0.75,
+      "gen_eval_mean_expected_coverage": 0.65,
       "gen_eval_mean_answer_relevance": 0.8,
-      "gen_eval_mean_citation_coverage": 0.45
+      "gen_eval_mean_citation_coverage": 0.55
     },
     "max": {
       "gen_eval_refusal_rate": 0.2
