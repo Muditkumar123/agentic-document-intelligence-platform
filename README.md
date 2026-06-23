@@ -265,6 +265,17 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.eval_gate \
 
 See [docs/CICD.md](docs/CICD.md) for the gate design and how to update thresholds. The badge above reflects the latest run (update the `Muditkumar123/<repo>` slug if you name the repository differently).
 
+## Deployment
+
+The project ships as a single self-contained container (API + dashboard, demo index baked in, no GPU or model download). Run it in one command:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up --build
+# open http://localhost:8010   (health: curl http://localhost:8010/health)
+```
+
+The image is a slim multi-stage build with pinned runtime deps, a non-root user, a `/health` healthcheck, and `$PORT` support for hosted platforms. A [`render.yaml`](render.yaml) blueprint gives a one-click Render deploy, and CI builds + smoke-tests the image on every push. Full guide: [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Model Profiles
 
 The project now has selectable model profiles in `config/model_profiles.yaml`:

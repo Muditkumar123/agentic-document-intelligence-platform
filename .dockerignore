@@ -1,0 +1,40 @@
+# Keep the build context (and image) small and reproducible.
+.git
+.github
+.gitignore
+.dvc
+.dvcignore
+dvc.yaml
+params.yaml
+
+# Python caches / build artifacts
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+build/
+dist/
+
+# Virtualenvs / local envs / secrets
+.venv
+venv/
+.env
+.env.*
+!.env.example
+
+# Data the image rebuilds or doesn't need (the demo index is built from data/eval)
+data/raw
+data/processed
+data/monitoring
+models
+notebooks
+
+# Tests aren't needed in the runtime image
+tests
+
+# Misc
+*.bundle
+audit_repro
+Testing_videos

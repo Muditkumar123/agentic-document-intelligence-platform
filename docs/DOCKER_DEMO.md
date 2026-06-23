@@ -1,13 +1,13 @@
 # Docker Demo
 
-This demo runs the FastAPI dashboard in a container for a clean, repeatable project walkthrough.
+This demo runs the FastAPI dashboard in a container for a clean, repeatable project walkthrough. For the production image design and one-click hosting (Render/Fly), see [DEPLOY.md](DEPLOY.md).
 
 ## Start The API
 
 From the project root:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml up --build adip-api
+docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
 Open:
@@ -32,13 +32,7 @@ http://127.0.0.1:8010/docs
 6. Review the quality metrics, citations, trace, and raw JSON.
 7. Click `Export` to download a Markdown report.
 
-The container mounts the local `data/`, `config/`, and `prompts/` folders, so uploaded documents, processed chunks, indexes, and monitoring traces remain visible on the host machine.
-
-## Run Smoke Tests
-
-```bash
-docker compose -f infra/docker/docker-compose.yml run --rm adip-smoke
-```
+The image ships with a demo index already built from the real public-document corpus (`data/eval/`), so retrieval, cited answers, and the Answer-Quality tiles work immediately — no setup needed. The container is stateless by default; see [DEPLOY.md](DEPLOY.md#persistence-optional) to persist uploads across restarts. The Docker image is built and smoke-tested in CI.
 
 ## Local LLM Note
 
