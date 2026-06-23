@@ -15,7 +15,7 @@ Runs only after `test` passes, and reproduces the evaluation pipeline end to end
 
 1. **Ingestion** — `run_ingestion` parses `data/eval/raw/` (18 real public docs across 5 categories) into `data/processed/chunks.jsonl`.
 2. **Retrieval eval** — `run_rag_eval` builds a TF-IDF index (`--no-faiss`, no reranker, hermetic) over the corpus, scored against `data/eval/golden_qa.jsonl` (45 questions), and writes `data/monitoring/rag_eval_metrics.json` with `hit_rate_at_k`, `mrr`, and per-category slices.
-3. **Generation eval** — `run_generation_eval` answers the golden questions with the deterministic extractive writer and writes `data/monitoring/generation_eval_metrics.json` with the `gen_eval_*` metrics.
+3. **Generation eval** — `run_generation_eval --abstention-threshold 0.10` answers the golden questions with the deterministic extractive writer, refusing when evidence is too weak, and writes `data/monitoring/generation_eval_metrics.json` with the `gen_eval_*` metrics (including refusal precision/recall over the 10 unanswerable questions).
 4. **Gate** — `eval_gate` compares those metrics against [`ci/eval_thresholds.json`](../ci/eval_thresholds.json) and exits non-zero if any check fails.
 
 See [EVALUATION_DATASET.md](EVALUATION_DATASET.md) for the corpus, sources, and licensing. Retrieval is saturated (1.0) on this lexically-distinct corpus, so the discriminating gate is generation faithfulness.
@@ -36,12 +36,16 @@ Measured on the real public-document corpus (`data/eval/`):
 | --- | --- | --- | --- | --- |
 | retrieval | `hit_rate_at_k` | min | 0.85 | 1.00 |
 | retrieval | `mrr` | min | 0.80 | 1.00 |
-| generation | `gen_eval_mean_faithfulness` | min | 0.45 | 0.595 |
-| generation | `gen_eval_grounded_rate` | min | 0.80 | 0.956 |
+| generation | `gen_eval_mean_faithfulness` | min | 0.45 | 0.594 |
+| generation | `gen_eval_grounded_rate` | min | 0.80 | 0.94 |
 | generation | `gen_eval_mean_expected_coverage` | min | 0.65 | 0.795 |
-| generation | `gen_eval_mean_answer_relevance` | min | 0.80 | 1.00 |
-| generation | `gen_eval_mean_citation_coverage` | min | 0.55 | 0.767 |
-| generation | `gen_eval_refusal_rate` | max | 0.20 | 0.00 |
+| generation | `gen_eval_mean_answer_relevance` | min | 0.80 | 0.909 |
+| generation | `gen_eval_mean_citation_coverage` | min | 0.55 | 0.705 |
+| generation | `gen_eval_refusal_precision` | min | 0.80 | 1.00 |
+| generation | `gen_eval_refusal_recall` | min | 0.40 | 0.50 |
+| generation | `gen_eval_refusal_rate` | max | 0.20 | 0.091 |
+
+Generation eval runs with `--abstention-threshold 0.10`: the writer refuses when the best retrieved evidence score is below 0.10. `refusal_precision` / `refusal_recall` treat "should refuse" (the 10 unanswerable golden questions) as the positive class — so the gate enforces that abstention catches off-domain questions (recall) without falsely refusing real ones (precision). If abstention were accidentally disabled, recall would drop to 0 and fail the gate.
 
 A metric that is missing or non-numeric in the report is treated as a **failure** (`MISSING`), so a renamed or dropped metric cannot silently disable a gate.
 

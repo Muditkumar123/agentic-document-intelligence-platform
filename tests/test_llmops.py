@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from adip.llmops.evaluation import evaluate_generation
 from adip.llmops.generation_eval import aggregate_eval, score_answer
 from adip.llmops.models import clean_evidence_text
-from adip.llmops.pipeline import generate_grounded_response, write_llmops_report
+from adip.llmops.pipeline import evaluate_abstention, generate_grounded_response, write_llmops_report
 from adip.llmops.prompts import load_prompt_template
 from adip.llmops.verifier import normalize_verifier_output
 from adip.mlops.run_generation_eval import main as run_generation_eval_main
@@ -584,6 +584,56 @@ def test_aggregate_eval_summarizes_cases():
     assert report.mean_faithfulness == 1.0
     assert report.grounded_rate == 1.0
     assert report.metrics()["gen_eval_refusal_rate"] == 0.5
+
+
+def test_evaluate_abstention_disabled_when_threshold_none():
+    assert evaluate_abstention([{"score": 0.01}], None) is None
+
+
+def test_evaluate_abstention_passes_when_score_above_threshold():
+    assert evaluate_abstention([{"score": 0.5}, {"score": 0.2}], 0.1) is None
+
+
+def test_evaluate_abstention_refuses_on_weak_evidence():
+    response = evaluate_abstention([{"score": 0.05}, {"score": 0.02}], 0.1)
+    assert response is not None
+    assert "insufficient evidence" in response.text.lower()
+    assert response.raw["abstained"] is True
+    assert response.raw["max_evidence_score"] == 0.05
+
+
+def test_evaluate_abstention_refuses_on_empty_evidence():
+    response = evaluate_abstention([], 0.1)
+    assert response is not None and response.raw["abstained"] is True
+
+
+def test_refusal_precision_and_recall_track_abstention_quality():
+    correct_refusal = score_answer("q", "insufficient evidence here", [], answerable=False)
+    missed_unanswerable = score_answer(
+        "q", "some grounded text (c1).", [{"citation": "c1", "text": "some grounded text"}], answerable=False
+    )
+    answered = score_answer(
+        "q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}], answerable=True
+    )
+    false_refusal = score_answer("q", "insufficient evidence", [], answerable=True)
+
+    report = aggregate_eval([correct_refusal, missed_unanswerable, answered, false_refusal])
+
+    assert report.unanswerable_count == 2
+    assert report.refusal_precision == 0.5  # 2 refusals, 1 on a genuinely unanswerable question
+    assert report.refusal_recall == 0.5  # 2 unanswerable, 1 correctly refused
+    metrics = report.metrics()
+    assert metrics["gen_eval_refusal_precision"] == 0.5
+    assert metrics["gen_eval_refusal_recall"] == 0.5
+
+
+def test_refusal_metrics_default_to_one_when_no_refusals_or_unanswerable():
+    answered = score_answer(
+        "q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}], answerable=True
+    )
+    report = aggregate_eval([answered])
+    assert report.refusal_precision == 1.0  # no false refusals possible
+    assert report.refusal_recall == 1.0  # no unanswerable questions to catch
 
 
 def test_tracked_generation_eval_command(tmp_path):

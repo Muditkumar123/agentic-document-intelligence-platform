@@ -47,6 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--max-new-tokens", type=int, default=None)
     parser.add_argument("--reasoning-effort", choices=["auto", "none", "low", "medium", "high"], default="auto")
+    # Abstention: refuse when the best retrieved evidence score is below this value.
+    parser.add_argument("--abstention-threshold", type=float, default=None)
     # Scoring thresholds.
     parser.add_argument("--grounded-threshold", type=float, default=0.5)
     parser.add_argument("--substring-overlap-threshold", type=float, default=0.6)
@@ -93,6 +95,7 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
             device=args.device,
             max_new_tokens=args.max_new_tokens,
             reasoning_effort=args.reasoning_effort,
+            abstention_threshold=args.abstention_threshold,
         )
         cases.append(
             score_answer(
@@ -100,6 +103,7 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
                 result.answer,
                 result.evidence,
                 row.get("expected_substrings"),
+                answerable=row.get("answerable", True),
                 grounded_threshold=args.grounded_threshold,
                 substring_overlap_threshold=args.substring_overlap_threshold,
             )
@@ -129,6 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "model_profile": args.model_profile or "",
                 "model_name": args.model_name or "",
                 "reasoning_effort": args.reasoning_effort,
+                "abstention_threshold": args.abstention_threshold if args.abstention_threshold is not None else "",
                 "grounded_threshold": args.grounded_threshold,
                 "substring_overlap_threshold": args.substring_overlap_threshold,
             }

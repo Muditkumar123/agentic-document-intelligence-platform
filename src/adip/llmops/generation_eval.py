@@ -33,6 +33,7 @@ class GenerationEvalCase:
     citation_coverage: float
     supported_token_count: int
     answer_token_count: int
+    answerable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -48,6 +49,9 @@ class GenerationEvalReport:
     mean_citation_coverage: float
     grounded_rate: float
     refusal_rate: float
+    unanswerable_count: int
+    refusal_precision: float
+    refusal_recall: float
     cases: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
@@ -63,6 +67,9 @@ class GenerationEvalReport:
             "gen_eval_mean_citation_coverage": self.mean_citation_coverage,
             "gen_eval_grounded_rate": self.grounded_rate,
             "gen_eval_refusal_rate": self.refusal_rate,
+            "gen_eval_unanswerable_count": float(self.unanswerable_count),
+            "gen_eval_refusal_precision": self.refusal_precision,
+            "gen_eval_refusal_recall": self.refusal_recall,
         }
 
 
@@ -78,6 +85,7 @@ def score_answer(
     evidence: list[dict[str, Any]],
     expected_substrings: list[str] | None = None,
     *,
+    answerable: bool = True,
     grounded_threshold: float = 0.5,
     substring_overlap_threshold: float = 0.6,
 ) -> GenerationEvalCase:
@@ -129,6 +137,7 @@ def score_answer(
         citation_coverage=quality.citation_coverage,
         supported_token_count=len(supported_tokens),
         answer_token_count=len(answer_tokens),
+        answerable=answerable,
     )
 
 
@@ -146,6 +155,17 @@ def aggregate_eval(cases: list[GenerationEvalCase]) -> GenerationEvalReport:
     grounded_rate = _mean([1.0 if case.grounded else 0.0 for case in answered])
     refusal_rate = _mean([1.0 if case.refusal else 0.0 for case in cases])
 
+    # Abstention quality: treat "should refuse" (unanswerable) as the positive class.
+    refused = [case for case in cases if case.refusal]
+    unanswerable = [case for case in cases if not case.answerable]
+    correct_refusals = sum(1 for case in cases if case.refusal and not case.answerable)
+    # Precision: of all refusals, how many were on genuinely unanswerable questions
+    # (1.0 when the writer never refused -> no false refusals).
+    refusal_precision = correct_refusals / len(refused) if refused else 1.0
+    # Recall: of all unanswerable questions, how many the writer correctly refused
+    # (1.0 when there are no unanswerable questions to catch).
+    refusal_recall = correct_refusals / len(unanswerable) if unanswerable else 1.0
+
     return GenerationEvalReport(
         case_count=len(cases),
         answered_count=len(answered),
@@ -155,5 +175,8 @@ def aggregate_eval(cases: list[GenerationEvalCase]) -> GenerationEvalReport:
         mean_citation_coverage=_mean([case.citation_coverage for case in cases]),
         grounded_rate=grounded_rate,
         refusal_rate=refusal_rate,
+        unanswerable_count=len(unanswerable),
+        refusal_precision=refusal_precision,
+        refusal_recall=refusal_recall,
         cases=[case.to_dict() for case in cases],
     )

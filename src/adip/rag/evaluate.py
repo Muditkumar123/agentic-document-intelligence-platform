@@ -107,6 +107,10 @@ def evaluate(
         raise ValueError("candidate_k must be greater than or equal to top_k")
 
     for row in golden:
+        # Unanswerable rows have no correct chunk to retrieve; they are scored by the
+        # generation abstention eval, not by retrieval hit rate / MRR.
+        if not row.get("answerable", True):
+            continue
         query_start = time.perf_counter()
         candidates = index.search(row["question"], top_k=resolved_candidate_k)
         retrieved = rerank_results(
@@ -144,7 +148,9 @@ def evaluate(
         )
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000
-    total = len(golden)
+    total = len(results)  # answerable rows only (unanswerable rows are skipped above)
+    if total == 0:
+        raise ValueError("No answerable golden rows to evaluate retrieval against")
     hit_rate_by_category, mrr_by_category = aggregate_by_category(results)
     return {
         "backend": index.backend,
