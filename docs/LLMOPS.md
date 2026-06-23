@@ -15,7 +15,7 @@ This phase adds prompt, model, generation, and quality tracking around the answe
 - Truncation/answer-budget warnings for hosted thinking models (`answer_warning`).
 - Reasoning-block (`<think>`) stripping for both hosted and local reasoning models.
 - Deterministic answer-quality evaluation (faithfulness, relevance, expected-fact coverage, citations) over the golden set.
-- Evidence-gated abstention: the writer refuses when the best retrieval score is below a threshold, measured with refusal precision/recall over unanswerable questions.
+- Evidence-gated abstention in two modes: a deterministic lexical score threshold (the CI gate) and an opt-in QNLI answer-entailment check (`--abstention-mode nli`); measured with refusal precision/recall over unanswerable questions (lexical 1.0/0.5, NLI 1.0/1.0 on the eval corpus).
 - Structured verifier-output normalization for reasoning models.
 - LLMOps JSON reports.
 - MLOps-tracked LLMOps smoke command.

@@ -57,12 +57,21 @@ The retrieval report also includes per-category slices `hit_rate_by_category` an
 
 ### Abstention (knowing when to say "I don't know")
 
-The 10 unanswerable questions measure whether the system **refuses** instead of confabulating. `generate_grounded_response` supports an evidence-gated abstention threshold: when the best retrieved score is below it, the writer refuses before generating, for any provider. CI runs generation eval with `--abstention-threshold 0.10`, and the report adds:
+The 10 unanswerable questions measure whether the system **refuses** instead of confabulating. `generate_grounded_response` supports two evidence-gated abstention modes, both refusing before generating (for any provider) and scored by the same metrics:
 
 - `gen_eval_refusal_precision` — of all refusals, the fraction on genuinely unanswerable questions (don't refuse real questions).
 - `gen_eval_refusal_recall` — of all unanswerable questions, the fraction correctly refused.
 
-On the eval corpus this scores **precision 1.0, recall 0.5**. The honest finding: score-threshold abstention catches *off-domain* questions perfectly (they retrieve near-zero scores), but *in-domain-but-unanswerable* questions ("What is the maximum fine under the EU AI Act?") retrieve a topically-related chunk with a score as high as a real question, so a lexical score threshold can't separate them. Pushing recall higher would start falsely refusing real questions (precision drops). The principled next step is a **semantic / NLI check** (does the evidence actually entail an answer?) layered behind the same metrics — a clean follow-up that doesn't change the report shape.
+**Score mode (lexical, the CI gate)** — refuse when the best retrieval score is below a threshold. Deterministic, so it runs in CI (`--abstention-threshold 0.10`). On the eval corpus: **precision 1.0, recall 0.5**. The limitation: it catches *off-domain* questions perfectly (near-zero scores), but *in-domain-but-unanswerable* questions ("What is the maximum fine under the EU AI Act?") retrieve a topically-related chunk scoring as high as a real question, so a lexical threshold can't separate them without false-refusing real questions.
+
+**NLI mode (semantic, opt-in offline)** — refuse when a QNLI cross-encoder ("does this text answer this question?") scores every retrieved chunk below a threshold. Run with `--abstention-mode nli --abstention-threshold 0.2 --allow-nli-download` (needs `transformers` + a model download, so it is not in the deterministic CI gate). On the eval corpus it achieves **precision 1.0, recall 1.0** — it fully closes the gap, because the QNLI model scores the EU-AI-Act-fine question against the risk-tier text at 0.16 (correctly "doesn't answer") while real question/evidence pairs score 0.27–0.99. There is a clean separating gap (unanswerable max ≤ 0.121, answerable min 0.266), so threshold 0.2 perfectly separates the two on this corpus.
+
+| Abstention mode | Precision | Recall | In CI? |
+| --- | --- | --- | --- |
+| Score (lexical, threshold 0.10) | 1.00 | 0.50 | yes (deterministic gate) |
+| NLI / QNLI (threshold 0.2) | 1.00 | 1.00 | no (opt-in offline) |
+
+The same `EntailmentScorer` interface lets any answerability model be swapped in; the pipeline and tests depend only on the callable, not on a specific model.
 
 ## What The Dataset Tests
 

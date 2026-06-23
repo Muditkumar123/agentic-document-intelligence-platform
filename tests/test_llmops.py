@@ -599,12 +599,33 @@ def test_evaluate_abstention_refuses_on_weak_evidence():
     assert response is not None
     assert "insufficient evidence" in response.text.lower()
     assert response.raw["abstained"] is True
-    assert response.raw["max_evidence_score"] == 0.05
+    assert response.raw["abstention_mode"] == "score"
+    assert response.raw["confidence"] == 0.05
 
 
 def test_evaluate_abstention_refuses_on_empty_evidence():
     response = evaluate_abstention([], 0.1)
     assert response is not None and response.raw["abstained"] is True
+
+
+def test_evaluate_abstention_nli_mode_uses_entailment_scorer():
+    # Fake NLI scorer: low entailment -> should refuse even though lexical score is high.
+    evidence = [{"score": 0.9, "text": "off-topic chunk"}]
+    response = evaluate_abstention(
+        evidence, 0.5, entailment_scorer=lambda q, e: 0.1, question="unanswerable?"
+    )
+    assert response is not None
+    assert response.raw["abstention_mode"] == "nli"
+    assert response.raw["confidence"] == 0.1
+
+
+def test_evaluate_abstention_nli_mode_proceeds_when_entailed():
+    evidence = [{"score": 0.05, "text": "answering chunk"}]
+    # High entailment -> answer even though lexical score is low.
+    response = evaluate_abstention(
+        evidence, 0.5, entailment_scorer=lambda q, e: 0.92, question="answerable?"
+    )
+    assert response is None
 
 
 def test_refusal_precision_and_recall_track_abstention_quality():
