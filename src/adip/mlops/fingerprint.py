@@ -30,31 +30,33 @@ def directory_fingerprint(path: Path) -> dict[str, str]:
     return fingerprints
 
 
-def git_commit(cwd: Path | None = None) -> str | None:
-    """Return the current git commit when available."""
-    command = ["git", "rev-parse", "HEAD"]
-    completed = subprocess.run(
-        command,
-        cwd=str(cwd) if cwd else None,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+def _run_git(args: list[str], cwd: Path | None) -> str | None:
+    """Run a git command, returning stripped stdout or None when unavailable.
+
+    Returns None on a non-zero exit (e.g. not a git repository) and also when git
+    itself is not installed — which is the normal case inside a slim container, so
+    MLOps run tracking must degrade gracefully rather than crash.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd) if cwd else None,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError):
+        return None
     if completed.returncode != 0:
         return None
     return completed.stdout.strip()
+
+
+def git_commit(cwd: Path | None = None) -> str | None:
+    """Return the current git commit when available."""
+    return _run_git(["rev-parse", "HEAD"], cwd)
 
 
 def git_dirty_status(cwd: Path | None = None) -> str | None:
     """Return short git status output when available."""
-    command = ["git", "status", "--short"]
-    completed = subprocess.run(
-        command,
-        cwd=str(cwd) if cwd else None,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        return None
-    return completed.stdout.strip()
+    return _run_git(["status", "--short"], cwd)

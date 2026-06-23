@@ -1,18 +1,26 @@
+# One-command local bring-up of the production image:
+#   docker compose -f infra/docker/docker-compose.yml up --build
+# then open http://localhost:8010
 services:
-  adip-api:
+  adip:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile
-    command: python -m adip.api --host 0.0.0.0 --port 8010
+    image: agentic-document-intelligence:latest
     ports:
       - "8010:8010"
-    volumes:
-      - ../../data:/app/data
-      - ../../config:/app/config:ro
-      - ../../prompts:/app/prompts:ro
-
-  adip-smoke:
-    build:
-      context: ../..
-      dockerfile: infra/docker/Dockerfile
-    command: python -m pytest
+    environment:
+      - PORT=8010
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # To persist uploaded documents and a rebuilt index across restarts, mount a
+    # named volume at /app/data (the entrypoint rebuilds the index on first start):
+    # volumes:
+    #   - adip-data:/app/data
+# volumes:
+#   adip-data:
