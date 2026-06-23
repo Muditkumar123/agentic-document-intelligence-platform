@@ -23,6 +23,7 @@ from adip.llmops.models import (
     build_answer_warning,
     get_adapter,
 )
+from adip.llmops.nli import EntailmentScorer
 from adip.llmops.prompts import PromptTemplate, load_prompt_template
 from adip.llmops.verifier import normalize_verifier_output
 
@@ -105,6 +106,7 @@ def generate_grounded_response(
     local_files_only: bool | None = None,
     reasoning_effort: str | None = None,
     abstention_threshold: float | None = None,
+    entailment_scorer: EntailmentScorer | None = None,
 ) -> LLMOpsResult:
     load_project_env()
     model_profile = resolve_model_profile(model_profile_id, model_profiles_path)
@@ -131,7 +133,9 @@ def generate_grounded_response(
     evidence = build_evidence(retrieved)
     prompt = load_prompt_template(task_type=task_type, prompt_dir=prompt_dir, version=prompt_version)
 
-    abstention = evaluate_abstention(evidence, abstention_threshold)
+    abstention = evaluate_abstention(
+        evidence, abstention_threshold, entailment_scorer=entailment_scorer, question=question
+    )
     if abstention is not None:
         # Evidence is too weak to ground an answer: refuse before spending a model
         # call, regardless of provider. This is a system-level RAG guardrail.
@@ -211,30 +215,42 @@ ABSTENTION_TEXT = (
 def evaluate_abstention(
     evidence: list[dict[str, Any]],
     abstention_threshold: float | None,
+    *,
+    entailment_scorer: EntailmentScorer | None = None,
+    question: str | None = None,
 ) -> GenerationResponse | None:
-    """Decide whether to abstain because the best evidence is too weakly relevant.
+    """Decide whether to abstain because the evidence is too weak to ground an answer.
 
-    Returns a refusal ``GenerationResponse`` when the highest retrieval score is
-    below ``abstention_threshold`` (or there is no evidence at all), otherwise
-    ``None`` to proceed with normal generation. Disabled when the threshold is
-    ``None``. The refusal text contains "insufficient evidence" so the existing
-    refusal detector and refusal metrics pick it up.
+    Returns a refusal ``GenerationResponse`` when the confidence is below
+    ``abstention_threshold`` (or there is no evidence), otherwise ``None`` to
+    proceed with normal generation. Disabled when the threshold is ``None``.
+
+    Confidence is the maximum retrieval score across evidence (``score`` mode), or
+    the maximum answer-entailment probability from ``entailment_scorer`` when one
+    is supplied (``nli`` mode). The refusal text contains "insufficient evidence"
+    so the existing refusal detector and refusal metrics pick it up.
     """
     if abstention_threshold is None:
         return None
-    max_score = max((float(item.get("score", 0.0)) for item in evidence), default=0.0)
-    if max_score >= abstention_threshold:
+    if entailment_scorer is not None:
+        mode = "nli"
+        confidence = float(entailment_scorer(question or "", evidence))
+    else:
+        mode = "score"
+        confidence = max((float(item.get("score", 0.0)) for item in evidence), default=0.0)
+    if confidence >= abstention_threshold:
         return None
     return GenerationResponse(
         text=ABSTENTION_TEXT,
         model_provider="abstention",
-        model_name="evidence-gate",
+        model_name=f"evidence-gate-{mode}",
         latency_ms=0.0,
         input_token_count=0,
         output_token_count=0,
         raw={
             "abstained": True,
-            "max_evidence_score": max_score,
+            "abstention_mode": mode,
+            "confidence": confidence,
             "abstention_threshold": float(abstention_threshold),
         },
     )

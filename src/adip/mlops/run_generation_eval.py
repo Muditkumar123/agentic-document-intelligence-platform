@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Sequence
 
 from adip.llmops.generation_eval import GenerationEvalReport, aggregate_eval, score_answer
+from adip.llmops.nli import DEFAULT_NLI_MODEL, NLIEntailmentScorer
 from adip.llmops.pipeline import generate_grounded_response
 from adip.mlops.tracking import start_run
 from adip.rag.evaluate import read_golden
@@ -47,8 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--max-new-tokens", type=int, default=None)
     parser.add_argument("--reasoning-effort", choices=["auto", "none", "low", "medium", "high"], default="auto")
-    # Abstention: refuse when the best retrieved evidence score is below this value.
+    # Abstention: refuse when confidence is below this value (disabled when unset).
     parser.add_argument("--abstention-threshold", type=float, default=None)
+    parser.add_argument("--abstention-mode", choices=["score", "nli"], default="score")
+    parser.add_argument("--nli-model", default=DEFAULT_NLI_MODEL)
+    parser.add_argument("--nli-device", default=None)
+    parser.add_argument("--allow-nli-download", action="store_true")
     # Scoring thresholds.
     parser.add_argument("--grounded-threshold", type=float, default=0.5)
     parser.add_argument("--substring-overlap-threshold", type=float, default=0.6)
@@ -67,6 +72,14 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
     resolved_candidate_k = args.candidate_k or args.top_k
     if resolved_candidate_k < args.top_k:
         raise ValueError("candidate_k must be greater than or equal to top_k")
+
+    entailment_scorer = None
+    if args.abstention_threshold is not None and args.abstention_mode == "nli":
+        entailment_scorer = NLIEntailmentScorer(
+            model_name=args.nli_model,
+            device=args.nli_device,
+            local_files_only=not args.allow_nli_download,
+        )
 
     cases = []
     for row in golden:
@@ -96,6 +109,7 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
             max_new_tokens=args.max_new_tokens,
             reasoning_effort=args.reasoning_effort,
             abstention_threshold=args.abstention_threshold,
+            entailment_scorer=entailment_scorer,
         )
         cases.append(
             score_answer(
@@ -134,6 +148,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "model_name": args.model_name or "",
                 "reasoning_effort": args.reasoning_effort,
                 "abstention_threshold": args.abstention_threshold if args.abstention_threshold is not None else "",
+                "abstention_mode": args.abstention_mode,
+                "nli_model": args.nli_model if args.abstention_mode == "nli" else "",
                 "grounded_threshold": args.grounded_threshold,
                 "substring_overlap_threshold": args.substring_overlap_threshold,
             }
