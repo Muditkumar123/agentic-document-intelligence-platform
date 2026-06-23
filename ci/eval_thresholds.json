@@ -1,5 +1,5 @@
 {
-  "_comment": "CI quality-gate thresholds, measured on the REAL public-document eval corpus (data/eval/raw, 18 docs across 5 categories; data/eval/golden_qa.jsonl, 45 questions). Floors (min) and the refusal ceiling (max) sit with margin around the measured deterministic baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 1.0, faithfulness 0.595, grounded_rate 0.956, expected_coverage 0.795, answer_relevance 1.0, citation_coverage 0.767, refusal_rate 0.0. Retrieval is saturated because the corpus is lexically distinct across domains; the discriminating gate is generation faithfulness. Regenerate metrics with: python -m adip.mlops.run_rag_eval --chunks data/processed/chunks.jsonl --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval --index data/processed/vector_index --golden data/eval/golden_qa.jsonl",
+  "_comment": "CI quality-gate thresholds, measured on the REAL public-document eval corpus (data/eval/raw, 18 docs across 5 categories; data/eval/golden_qa.jsonl, 45 answerable + 10 unanswerable questions). Generation eval runs with evidence-gated abstention (--abstention-threshold 0.10). Floors (min) and the refusal-rate ceiling (max) sit with margin around the measured deterministic baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 1.0 (over the 45 answerable rows), faithfulness 0.594, grounded_rate 0.94, expected_coverage 0.795, answer_relevance 0.909, citation_coverage 0.705, refusal_rate 0.091, refusal_precision 1.0, refusal_recall 0.5. Retrieval is saturated because the corpus is lexically distinct; the discriminating gates are generation faithfulness and abstention precision/recall. Regenerate with: python -m adip.mlops.run_rag_eval --chunks data/processed/chunks.jsonl --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --abstention-threshold 0.10",
   "retrieval": {
     "metrics_file": "data/monitoring/rag_eval_metrics.json",
     "min": {
@@ -14,7 +14,9 @@
       "gen_eval_grounded_rate": 0.8,
       "gen_eval_mean_expected_coverage": 0.65,
       "gen_eval_mean_answer_relevance": 0.8,
-      "gen_eval_mean_citation_coverage": 0.55
+      "gen_eval_mean_citation_coverage": 0.55,
+      "gen_eval_refusal_precision": 0.8,
+      "gen_eval_refusal_recall": 0.4
     },
     "max": {
       "gen_eval_refusal_rate": 0.2

@@ -104,6 +104,7 @@ def generate_grounded_response(
     max_new_tokens: int | None = None,
     local_files_only: bool | None = None,
     reasoning_effort: str | None = None,
+    abstention_threshold: float | None = None,
 ) -> LLMOpsResult:
     load_project_env()
     model_profile = resolve_model_profile(model_profile_id, model_profiles_path)
@@ -129,6 +130,21 @@ def generate_grounded_response(
 
     evidence = build_evidence(retrieved)
     prompt = load_prompt_template(task_type=task_type, prompt_dir=prompt_dir, version=prompt_version)
+
+    abstention = evaluate_abstention(evidence, abstention_threshold)
+    if abstention is not None:
+        # Evidence is too weak to ground an answer: refuse before spending a model
+        # call, regardless of provider. This is a system-level RAG guardrail.
+        quality = evaluate_generation(abstention.text, evidence)
+        return LLMOpsResult(
+            answer=abstention.text,
+            prompt=prompt,
+            generation=abstention,
+            quality=quality,
+            evidence=evidence,
+            model_profile=model_profile.to_dict() if model_profile else None,
+        )
+
     rendered_prompt = prompt.render(
         question=question,
         domain_preset=domain_preset,
@@ -184,6 +200,44 @@ def resolve_model_profile(
     if not model_profile_id:
         return None
     return load_model_profile(model_profile_id, model_profiles_path)
+
+
+ABSTENTION_TEXT = (
+    "The retrieved evidence is insufficient evidence to answer this question "
+    "confidently, so no grounded answer was produced."
+)
+
+
+def evaluate_abstention(
+    evidence: list[dict[str, Any]],
+    abstention_threshold: float | None,
+) -> GenerationResponse | None:
+    """Decide whether to abstain because the best evidence is too weakly relevant.
+
+    Returns a refusal ``GenerationResponse`` when the highest retrieval score is
+    below ``abstention_threshold`` (or there is no evidence at all), otherwise
+    ``None`` to proceed with normal generation. Disabled when the threshold is
+    ``None``. The refusal text contains "insufficient evidence" so the existing
+    refusal detector and refusal metrics pick it up.
+    """
+    if abstention_threshold is None:
+        return None
+    max_score = max((float(item.get("score", 0.0)) for item in evidence), default=0.0)
+    if max_score >= abstention_threshold:
+        return None
+    return GenerationResponse(
+        text=ABSTENTION_TEXT,
+        model_provider="abstention",
+        model_name="evidence-gate",
+        latency_ms=0.0,
+        input_token_count=0,
+        output_token_count=0,
+        raw={
+            "abstained": True,
+            "max_evidence_score": max_score,
+            "abstention_threshold": float(abstention_threshold),
+        },
+    )
 
 
 def build_evidence(retrieved: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -35,7 +35,7 @@ Expected substrings are used instead of fixed chunk IDs because chunk IDs are ch
 The original corpus above (`data/raw/` + `data/reference/golden_qa.jsonl`) is small and project-authored, which made `hit_rate@k = 1.0` look potentially overfit. To make the metrics credible, the **CI quality gate** runs against a separate, fixed corpus of **real, externally authored public documents**:
 
 - Corpus: `data/eval/raw/` — **18 documents across 5 categories** (legal, academic, technical, security, finance).
-- Golden set: `data/eval/golden_qa.jsonl` — **45 questions**, each tagged with a `category`, including direct, synonym/paraphrase, and cross-cutting hard-negative questions.
+- Golden set: `data/eval/golden_qa.jsonl` — **45 answerable questions** (each tagged with a `category`, including direct, synonym/paraphrase, and cross-cutting hard-negative questions) plus **10 unanswerable questions** (`answerable: false`) used to measure abstention. Unanswerable rows are excluded from retrieval metrics and drive the generation refusal metrics.
 - Sources & licensing: every document is a short excerpt from a genuine public source (GDPR / EU AI Act legal text, IETF RFCs, NIST publications, SEC / Investor.gov, arXiv abstracts), documented with URL and license in [`data/eval/SOURCES.md`](../data/eval/SOURCES.md). NIST/SEC are U.S. Government public-domain works; RFCs are reproducible under IETF Trust terms; legal texts are reusable with attribution.
 
 This separation follows the principle that `data/raw/` is the **demo / user-upload** corpus, while `data/eval/` is the **fixed evaluation** corpus the gate is measured against.
@@ -54,6 +54,15 @@ This separation follows the principle that `data/raw/` is the **demo / user-uplo
 **Honest reading of retrieval = 1.0:** the five domains are lexically distinct (GDPR vs RFC vs SEC vocabularies barely overlap), so TF-IDF separates them trivially and hit_rate stays 1.0 even per-category. That is an honest property of a clean corpus, not overfitting — so retrieval is treated as a smoke test, and the **discriminating gate lives in generation faithfulness (0.595)**, which varies and does not saturate. The retrieval *ranking* discrimination story is carried by the separate cross-encoder reranking benchmark on the hard-negative dataset (MRR 0.733 → 0.900).
 
 The retrieval report also includes per-category slices `hit_rate_by_category` and `mrr_by_category` for diagnosis (the gate enforces robust overall aggregates, not noisy per-category numbers).
+
+### Abstention (knowing when to say "I don't know")
+
+The 10 unanswerable questions measure whether the system **refuses** instead of confabulating. `generate_grounded_response` supports an evidence-gated abstention threshold: when the best retrieved score is below it, the writer refuses before generating, for any provider. CI runs generation eval with `--abstention-threshold 0.10`, and the report adds:
+
+- `gen_eval_refusal_precision` — of all refusals, the fraction on genuinely unanswerable questions (don't refuse real questions).
+- `gen_eval_refusal_recall` — of all unanswerable questions, the fraction correctly refused.
+
+On the eval corpus this scores **precision 1.0, recall 0.5**. The honest finding: score-threshold abstention catches *off-domain* questions perfectly (they retrieve near-zero scores), but *in-domain-but-unanswerable* questions ("What is the maximum fine under the EU AI Act?") retrieve a topically-related chunk with a score as high as a real question, so a lexical score threshold can't separate them. Pushing recall higher would start falsely refusing real questions (precision drops). The principled next step is a **semantic / NLI check** (does the evidence actually entail an answer?) layered behind the same metrics — a clean follow-up that doesn't change the report shape.
 
 ## What The Dataset Tests
 
