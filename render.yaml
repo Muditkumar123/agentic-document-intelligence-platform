@@ -1,0 +1,12 @@
+# Render.com blueprint: one-click deploy of the API + dashboard as a Docker web service.
+# In the Render dashboard: New + -> Blueprint -> point at this repo. Render builds the
+# Dockerfile, injects $PORT (the entrypoint binds it), and health-checks /health.
+services:
+  - type: web
+    name: agentic-document-intelligence
+    runtime: docker
+    dockerfilePath: ./infra/docker/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true

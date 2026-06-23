@@ -1,9 +1,21 @@
 import json
 
+import adip.mlops.fingerprint as fingerprint
+from adip.mlops.fingerprint import git_commit, git_dirty_status
 from adip.mlops.run_ingestion import main as run_ingestion_main
 from adip.mlops.run_retrieval_benchmark import best_report_by_mrr
 from adip.mlops.run_retrieval_benchmark import main as run_retrieval_benchmark_main
 from adip.mlops.tracking import start_run
+
+
+def test_git_helpers_return_none_when_git_binary_missing(monkeypatch):
+    # In a slim container git is not installed; subprocess raises FileNotFoundError.
+    def _raise(*args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", "git")
+
+    monkeypatch.setattr(fingerprint.subprocess, "run", _raise)
+    assert git_commit() is None
+    assert git_dirty_status() is None
 
 
 def test_start_run_writes_local_run_record(tmp_path):
