@@ -154,6 +154,69 @@ def save_uploaded_document(
     }
 
 
+def list_raw_documents(
+    raw_dir: Path = Path("data/raw"),
+    index_path: Path = Path("data/processed/vector_index"),
+) -> dict[str, Any]:
+    """List uploadable documents in the raw folder and whether each is in the index."""
+    root = raw_dir.expanduser()
+    items: list[dict[str, Any]] = []
+    if root.is_dir():
+        for path in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+            if not path.is_file() or path.suffix.lower() not in SUPPORTED_UPLOAD_EXTENSIONS:
+                continue
+            stat = path.stat()
+            items.append(
+                {
+                    "filename": path.name,
+                    "extension": path.suffix.lower(),
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                }
+            )
+
+    indexed_filenames: set[str] = set()
+    try:
+        index = load_index(index_path)
+        indexed_filenames = {str(doc["filename"]) for doc in summarize_index_documents(index.chunks)}
+    except Exception:  # the index may not exist yet; listing must still work
+        indexed_filenames = set()
+
+    for item in items:
+        item["indexed"] = item["filename"] in indexed_filenames
+    on_disk = {item["filename"] for item in items}
+    indexed_but_deleted = sorted(name for name in indexed_filenames if name not in on_disk)
+    return {
+        "raw_dir": str(root),
+        "document_count": len(items),
+        "items": items,
+        "indexed_but_deleted": indexed_but_deleted,
+        "index_stale": bool(indexed_but_deleted) or any(not item["indexed"] for item in items),
+    }
+
+
+def delete_raw_document(filename: str, raw_dir: Path = Path("data/raw")) -> dict[str, Any]:
+    """Delete one document from the raw folder. The index keeps serving its chunks
+    until the next rebuild, so callers should surface a rebuild reminder."""
+    safe_name = safe_document_filename(filename)
+    root = raw_dir.expanduser().resolve()
+    target = (root / safe_name).resolve()
+    if target.parent != root:
+        raise ValueError("Filename escapes the raw documents directory")
+    if target.suffix.lower() not in SUPPORTED_UPLOAD_EXTENSIONS:
+        supported = ", ".join(sorted(SUPPORTED_UPLOAD_EXTENSIONS))
+        raise ValueError(f"Unsupported document type `{target.suffix.lower()}`. Supported: {supported}")
+    if not target.is_file():
+        raise FileNotFoundError(f"Document not found: {safe_name}")
+    target.unlink()
+    return {
+        "status": "deleted",
+        "filename": safe_name,
+        "raw_dir": str(root),
+        "note": "Rebuild the index to remove this document's chunks from retrieval.",
+    }
+
+
 def list_agent_trace_history(
     trace_dir: Path = Path("data/monitoring/agent_traces"),
     limit: int = 25,

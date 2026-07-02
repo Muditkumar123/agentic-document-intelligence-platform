@@ -114,6 +114,22 @@ curl -X POST http://127.0.0.1:8010/documents/upload \
 
 Supported upload types are `.pdf`, `.md`, and `.txt`. After upload, rebuild the index before querying the new document.
 
+## List Documents
+
+```bash
+curl "http://127.0.0.1:8010/documents?raw_dir=data/raw&index_path=data/processed/vector_index"
+```
+
+Lists the supported documents in the raw folder with size, modified time, and an `indexed` flag per file. The response also reports `indexed_but_deleted` (documents still in the index whose raw file is gone) and `index_stale` (true when the raw folder and the index disagree), which the dashboard uses to prompt a rebuild.
+
+## Delete A Document
+
+```bash
+curl -X DELETE "http://127.0.0.1:8010/documents/report.pdf?raw_dir=data/raw"
+```
+
+Deletes one document from the raw folder. Filenames are sanitized so they cannot escape the raw directory, and only supported document types can be deleted. The index keeps serving the deleted document's chunks until the next rebuild, so the dashboard shows a stale-index hint until you click Rebuild Index.
+
 ## Rebuild The Index
 
 ```bash
