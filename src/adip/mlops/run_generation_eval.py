@@ -17,7 +17,9 @@ from adip.llmops.generation_eval import (
     GenerationEvalReport,
     aggregate_eval,
     score_answer,
+    with_judge,
 )
+from adip.llmops.judge import DEFAULT_JUDGE_MAX_NEW_TOKENS, LLMJudge
 from adip.llmops.nli import DEFAULT_NLI_MODEL, NLIEntailmentScorer
 from adip.llmops.pipeline import generate_grounded_response
 from adip.mlops.tracking import start_run
@@ -58,6 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--nli-model", default=DEFAULT_NLI_MODEL)
     parser.add_argument("--nli-device", default=None)
     parser.add_argument("--allow-nli-download", action="store_true")
+    # Optional LLM-as-judge second opinion (offline; never part of the CI gate).
+    # The API key is used for this run only and is never written to disk or logged.
+    parser.add_argument("--judge-model-name", default=None)
+    parser.add_argument("--judge-endpoint-url", default=None)
+    parser.add_argument("--judge-api-key", default=None)
+    parser.add_argument("--judge-max-new-tokens", type=int, default=DEFAULT_JUDGE_MAX_NEW_TOKENS)
+    parser.add_argument("--judge-limit", type=int, default=0, help="Judge at most N answers (0 = all).")
     # Scoring thresholds.
     parser.add_argument("--grounded-threshold", type=float, default=0.5)
     parser.add_argument("--substring-overlap-threshold", type=float, default=0.6)
@@ -85,6 +94,16 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
             local_files_only=not args.allow_nli_download,
         )
 
+    judge = None
+    if args.judge_model_name:
+        judge = LLMJudge(
+            model_name=args.judge_model_name,
+            endpoint_url=args.judge_endpoint_url,
+            api_key=args.judge_api_key,
+            max_new_tokens=args.judge_max_new_tokens,
+        )
+
+    judged_so_far = 0
     cases = []
     for row in golden:
         candidates = index.search(row["question"], top_k=resolved_candidate_k)
@@ -115,17 +134,30 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
             abstention_threshold=args.abstention_threshold,
             entailment_scorer=entailment_scorer,
         )
-        cases.append(
-            score_answer(
-                row["question"],
-                result.answer,
-                result.evidence,
-                row.get("expected_substrings"),
-                answerable=row.get("answerable", True),
-                grounded_threshold=args.grounded_threshold,
-                substring_overlap_threshold=args.substring_overlap_threshold,
-            )
+        case = score_answer(
+            row["question"],
+            result.answer,
+            result.evidence,
+            row.get("expected_substrings"),
+            answerable=row.get("answerable", True),
+            grounded_threshold=args.grounded_threshold,
+            substring_overlap_threshold=args.substring_overlap_threshold,
         )
+        should_judge = (
+            judge is not None
+            and not case.refusal  # judging a refusal's faithfulness is meaningless
+            and (args.judge_limit <= 0 or judged_so_far < args.judge_limit)
+        )
+        if should_judge:
+            try:
+                verdict = judge(row["question"], result.answer, result.evidence)
+            except RuntimeError as exc:  # network/endpoint failure: skip, don't crash the eval
+                print(f"judge failed for {row['question'][:60]!r}: {exc}")
+                verdict = None
+            if verdict is not None:
+                judged_so_far += 1
+            case = with_judge(case, verdict)
+        cases.append(case)
     return aggregate_eval(cases)
 
 
@@ -154,6 +186,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "abstention_threshold": args.abstention_threshold if args.abstention_threshold is not None else "",
                 "abstention_mode": args.abstention_mode,
                 "nli_model": args.nli_model if args.abstention_mode == "nli" else "",
+                "judge_model_name": args.judge_model_name or "",
+                "judge_limit": args.judge_limit,
                 "grounded_threshold": args.grounded_threshold,
                 "substring_overlap_threshold": args.substring_overlap_threshold,
             }

@@ -15,10 +15,11 @@ be layered on later behind the same report shape.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from adip.llmops.evaluation import evaluate_generation
+from adip.llmops.judge import JudgeVerdict
 from adip.llmops.models import meaningful_terms
 
 
@@ -34,9 +35,18 @@ class GenerationEvalCase:
     supported_token_count: int
     answer_token_count: int
     answerable: bool = True
+    judge_faithfulness: float | None = None
+    judge_relevance: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def with_judge(case: GenerationEvalCase, verdict: JudgeVerdict | None) -> GenerationEvalCase:
+    """Attach a judge verdict to a scored case (no-op when judging failed)."""
+    if verdict is None:
+        return case
+    return replace(case, judge_faithfulness=verdict.faithfulness, judge_relevance=verdict.relevance)
 
 
 @dataclass(frozen=True)
@@ -53,12 +63,17 @@ class GenerationEvalReport:
     refusal_precision: float
     refusal_recall: float
     cases: list[dict[str, Any]]
+    judged_count: int = 0
+    judge_mean_faithfulness: float | None = None
+    judge_mean_relevance: float | None = None
+    judge_lexical_faithfulness_gap: float | None = None
+    judge_lexical_correlation: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def metrics(self) -> dict[str, float]:
-        return {
+        values = {
             "gen_eval_case_count": float(self.case_count),
             "gen_eval_answered_count": float(self.answered_count),
             "gen_eval_mean_faithfulness": self.mean_faithfulness,
@@ -71,6 +86,19 @@ class GenerationEvalReport:
             "gen_eval_refusal_precision": self.refusal_precision,
             "gen_eval_refusal_recall": self.refusal_recall,
         }
+        # Judge metrics appear only when a judge actually ran, so the deterministic
+        # CI metrics file keeps its exact shape when the judge is off.
+        if self.judged_count:
+            values["gen_eval_judged_count"] = float(self.judged_count)
+            if self.judge_mean_faithfulness is not None:
+                values["gen_eval_judge_mean_faithfulness"] = self.judge_mean_faithfulness
+            if self.judge_mean_relevance is not None:
+                values["gen_eval_judge_mean_relevance"] = self.judge_mean_relevance
+            if self.judge_lexical_faithfulness_gap is not None:
+                values["gen_eval_judge_lexical_faithfulness_gap"] = self.judge_lexical_faithfulness_gap
+            if self.judge_lexical_correlation is not None:
+                values["gen_eval_judge_lexical_correlation"] = self.judge_lexical_correlation
+        return values
 
 
 def _coverage_ratio(target: set[str], reference: set[str]) -> float:
@@ -166,6 +194,18 @@ def aggregate_eval(cases: list[GenerationEvalCase]) -> GenerationEvalReport:
     # (1.0 when there are no unanswerable questions to catch).
     refusal_recall = correct_refusals / len(unanswerable) if unanswerable else 1.0
 
+    judged = [case for case in cases if case.judge_faithfulness is not None]
+    # Agreement between the lexical faithfulness proxy and the judge, over cases
+    # where both scored: mean absolute gap plus Pearson correlation (None when
+    # there are too few points or a metric has zero variance).
+    paired = [
+        (case.faithfulness, case.judge_faithfulness)
+        for case in judged
+        if case.faithfulness is not None
+    ]
+    gap = _mean([abs(lexical - judge) for lexical, judge in paired]) if paired else None
+    correlation = _pearson(paired)
+
     return GenerationEvalReport(
         case_count=len(cases),
         answered_count=len(answered),
@@ -179,4 +219,28 @@ def aggregate_eval(cases: list[GenerationEvalCase]) -> GenerationEvalReport:
         refusal_precision=refusal_precision,
         refusal_recall=refusal_recall,
         cases=[case.to_dict() for case in cases],
+        judged_count=len(judged),
+        judge_mean_faithfulness=_mean([case.judge_faithfulness for case in judged]) if judged else None,
+        judge_mean_relevance=_mean(
+            [case.judge_relevance for case in judged if case.judge_relevance is not None]
+        )
+        if judged
+        else None,
+        judge_lexical_faithfulness_gap=gap,
+        judge_lexical_correlation=correlation,
     )
+
+
+def _pearson(pairs: list[tuple[float, float]]) -> float | None:
+    if len(pairs) < 2:
+        return None
+    xs = [x for x, _ in pairs]
+    ys = [y for _, y in pairs]
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    cov = sum((x - mean_x) * (y - mean_y) for x, y in pairs)
+    var_x = sum((x - mean_x) ** 2 for x in xs)
+    var_y = sum((y - mean_y) ** 2 for y in ys)
+    if var_x == 0 or var_y == 0:
+        return None
+    return cov / (var_x**0.5 * var_y**0.5)
