@@ -11,7 +11,7 @@ joblib==1.5.3
 MarkupSafe==3.0.3
 numpy==2.2.6
 pydantic==2.13.4
-pydantic_core==2.46.4
+pydantic_core==2.47.0
 python-multipart==0.0.32
 PyYAML==6.0.3
 scikit-learn==1.7.2
