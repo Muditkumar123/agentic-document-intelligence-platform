@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshGenerationEval();
   refreshModelProfiles();
   refreshIndexedDocuments();
+  refreshRawDocuments();
 });
 
 function bindModeTabs() {
@@ -65,7 +66,12 @@ function bindForms() {
   $("testCustomModel").addEventListener("click", () => testCustomModel());
   $("ragIndexPath").addEventListener("change", () => refreshIndexedDocuments());
   $("agentIndexPath").addEventListener("change", () => refreshIndexedDocuments());
-  $("indexPath").addEventListener("change", () => refreshIndexedDocuments());
+  $("indexPath").addEventListener("change", () => {
+    refreshIndexedDocuments();
+    refreshRawDocuments();
+  });
+  $("refreshRawDocs").addEventListener("click", () => refreshRawDocuments());
+  $("inputPath").addEventListener("change", () => refreshRawDocuments());
 }
 
 async function refreshHealth() {
@@ -245,6 +251,88 @@ async function refreshIndexedDocuments(preferredFilename) {
     populateDocumentSelect($("agentDocumentFilter"), [], null);
     console.warn(error);
   }
+}
+
+async function refreshRawDocuments() {
+  const rawDir = $("inputPath").value.trim() || "data/raw";
+  const indexPath = $("indexPath").value.trim() || "data/processed/vector_index";
+  try {
+    const payload = await getJson(
+      `/documents?raw_dir=${encodeURIComponent(rawDir)}&index_path=${encodeURIComponent(indexPath)}`,
+    );
+    renderRawDocuments(payload);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function renderRawDocuments(payload) {
+  const list = $("rawDocList");
+  list.innerHTML = "";
+  const items = payload.items || [];
+  if (!items.length) {
+    const empty = document.createElement("li");
+    empty.className = "doc-empty";
+    empty.textContent = "No documents in the raw folder yet. Upload one above.";
+    list.appendChild(empty);
+  }
+  items.forEach((doc) => {
+    const item = document.createElement("li");
+    item.className = "doc-item";
+    const meta = document.createElement("span");
+    meta.className = "doc-meta";
+    meta.textContent = `${doc.filename} · ${formatBytes(doc.size_bytes)}`;
+    const badge = document.createElement("span");
+    badge.className = doc.indexed ? "doc-badge indexed" : "doc-badge pending";
+    badge.textContent = doc.indexed ? "indexed" : "not indexed";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-action compact-action";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => deleteRawDocument(doc.filename));
+    item.append(meta, badge, remove);
+    list.appendChild(item);
+  });
+  $("docStaleHint").classList.toggle("hidden", !payload.index_stale);
+}
+
+async function deleteRawDocument(filename) {
+  const confirmed = window.confirm(
+    `Delete ${filename}? The index keeps serving its chunks until you Rebuild Index.`,
+  );
+  if (!confirmed) {
+    return;
+  }
+  const rawDir = $("inputPath").value.trim() || "data/raw";
+  try {
+    const response = await fetch(
+      `/documents/${encodeURIComponent(filename)}?raw_dir=${encodeURIComponent(rawDir)}`,
+      { method: "DELETE" },
+    );
+    const payload = await parseResponse(response);
+    setResultTitle("Document Delete");
+    setLatency(null);
+    renderAnswer([`Status: ${payload.status}`, `File: ${payload.filename}`, payload.note].join("\n"));
+    renderQuality(null);
+    renderCitations([]);
+    renderTrace([]);
+    renderRaw(payload);
+  } catch (error) {
+    renderError(error);
+  } finally {
+    refreshRawDocuments();
+  }
+}
+
+function formatBytes(size) {
+  const bytes = Number(size || 0);
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
 }
 
 function populateDocumentSelect(select, documents, preferredFilename) {
@@ -623,6 +711,7 @@ function renderIndexResult(payload) {
   renderRaw(payload);
   refreshBenchmark();
   refreshIndexedDocuments();
+  refreshRawDocuments();
 }
 
 async function uploadDocument(rebuildAfterUpload) {
@@ -654,6 +743,7 @@ async function uploadDocument(rebuildAfterUpload) {
     renderError(error);
   } finally {
     refreshHealth();
+    refreshRawDocuments();
   }
 }
 

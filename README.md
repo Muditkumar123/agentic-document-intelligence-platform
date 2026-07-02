@@ -338,7 +338,9 @@ The project now exposes the document workflow through a FastAPI service:
 - `GET /model-profiles`
 - `GET /history/agent-traces`
 - `GET /history/mlops-runs`
+- `GET /documents`
 - `POST /documents/upload`
+- `DELETE /documents/{filename}`
 - `POST /pipeline/rebuild-index`
 - `POST /rag/query`
 - `POST /agent/run`

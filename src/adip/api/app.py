@@ -12,6 +12,7 @@ from adip.api.schemas import (
 )
 from adip.api.services import (
     check_model_connection,
+    delete_raw_document,
     generation_eval_summary,
     get_agent_trace,
     get_mlops_run,
@@ -19,6 +20,7 @@ from adip.api.services import (
     indexed_documents,
     list_agent_trace_history,
     list_mlops_run_history,
+    list_raw_documents,
     model_profiles_summary,
     rebuild_index,
     retrieval_benchmark_summary,
@@ -73,6 +75,17 @@ def create_app():
     @app.get("/index/documents")
     def index_documents(index_path: str = "data/processed/vector_index") -> dict[str, Any]:
         return call_service(lambda: indexed_documents(Path(index_path)), HTTPException)
+
+    @app.get("/documents")
+    def raw_documents(
+        raw_dir: str = "data/raw",
+        index_path: str = "data/processed/vector_index",
+    ) -> dict[str, Any]:
+        return call_service(lambda: list_raw_documents(Path(raw_dir), Path(index_path)), HTTPException)
+
+    @app.delete("/documents/{filename}")
+    def remove_document(filename: str, raw_dir: str = "data/raw") -> dict[str, Any]:
+        return call_service(lambda: delete_raw_document(filename, Path(raw_dir)), HTTPException)
 
     @app.post("/documents/upload")
     async def upload_document(

@@ -566,6 +566,106 @@ input[type="file"]::file-selector-button:hover {
   padding: 0 16px;
 }
 
+.danger-action {
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.08);
+  color: var(--rose);
+}
+
+.danger-action:hover {
+  background: rgba(251, 113, 133, 0.16);
+  border-color: rgba(251, 113, 133, 0.55);
+}
+
+.doc-manager {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.doc-manager-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.doc-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.doc-badge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.doc-badge.indexed {
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.doc-badge.pending {
+  color: var(--amber);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.doc-empty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.doc-hint {
+  margin: 0;
+  padding: 10px 13px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.09);
+  color: #fcd97a;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .answer-block {
   margin-top: 22px;
 }

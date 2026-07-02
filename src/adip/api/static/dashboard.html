@@ -13,7 +13,7 @@
       defer
       src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
     ></script>
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260622-md6" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260702-docs1" />
   </head>
   <body>
     <header class="topbar">
@@ -315,6 +315,19 @@
               <span class="button-icon">B</span>
               Rebuild Index
             </button>
+
+            <div class="doc-manager" aria-label="Raw documents">
+              <div class="doc-manager-head">
+                <span>Raw Documents</span>
+                <button class="secondary-action compact-action" id="refreshRawDocs" type="button">
+                  Refresh
+                </button>
+              </div>
+              <ul class="doc-list" id="rawDocList"></ul>
+              <p class="doc-hint hidden" id="docStaleHint">
+                The index is out of sync with the raw folder. Rebuild Index to update retrieval.
+              </p>
+            </div>
           </form>
 
           <section class="workflow-form hidden" id="historyPanel" data-mode-panel="history">
@@ -387,6 +400,6 @@
       </section>
     </main>
 
-    <script src="/static/dashboard.js?v=20260622-md6" defer></script>
+    <script src="/static/dashboard.js?v=20260702-docs1" defer></script>
   </body>
 </html>
