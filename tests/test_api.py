@@ -2,10 +2,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import adip.api.app as api_app
-import adip.api.services as api_services
 from fastapi.testclient import TestClient
 
+import adip.api.app as api_app
+import adip.api.services as api_services
 from adip.api.app import create_app
 from adip.api.schemas import AgentRunRequest
 from adip.api.services import (

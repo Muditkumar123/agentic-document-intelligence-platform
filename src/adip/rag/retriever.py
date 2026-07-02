@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 from sklearn.preprocessing import normalize
-from sklearn.decomposition import TruncatedSVD
 
 INDEX_FILENAME = "rag_index.pkl"
 FAISS_INDEX_FILENAME = "faiss.index"

@@ -7,11 +7,11 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+from adip.mlops.tracking import start_run
 from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.evaluate import evaluate
 from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL
 from adip.rag.retriever import build_index
-from adip.mlops.tracking import start_run
 
 
 def build_parser() -> argparse.ArgumentParser:

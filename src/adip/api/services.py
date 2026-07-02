@@ -11,7 +11,12 @@ from typing import Any
 
 from adip import __version__
 from adip.agents.runner import run_agent_from_index_path
-from adip.api.schemas import AgentRunRequest, ModelCheckRequest, RagQueryRequest, RebuildIndexRequest
+from adip.api.schemas import (
+    AgentRunRequest,
+    ModelCheckRequest,
+    RagQueryRequest,
+    RebuildIndexRequest,
+)
 from adip.config.env import load_project_env
 from adip.config.model_profiles import load_model_profiles, profile_runtime_status
 from adip.ingestion.pipeline import ingest_path

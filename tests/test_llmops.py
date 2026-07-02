@@ -2,16 +2,20 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from adip.config.model_profiles import load_model_profile
 from adip.llmops.evaluation import evaluate_generation
 from adip.llmops.generation_eval import aggregate_eval, score_answer
 from adip.llmops.models import clean_evidence_text
-from adip.llmops.pipeline import evaluate_abstention, generate_grounded_response, write_llmops_report
+from adip.llmops.pipeline import (
+    evaluate_abstention,
+    generate_grounded_response,
+    write_llmops_report,
+)
 from adip.llmops.prompts import load_prompt_template
 from adip.llmops.verifier import normalize_verifier_output
 from adip.mlops.run_generation_eval import main as run_generation_eval_main
 from adip.mlops.run_llmops_smoke import main as run_llmops_smoke_main
 from adip.rag.retriever import build_index
-from adip.config.model_profiles import load_model_profile
 from adip.serving.backends import ExtractiveServingBackend
 from adip.serving.openai_server import build_handler
 
