@@ -4,7 +4,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from adip.api.schemas import AgentRunRequest, ModelCheckRequest, RagQueryRequest, RebuildIndexRequest
+from adip.api.schemas import (
+    AgentRunRequest,
+    ModelCheckRequest,
+    RagQueryRequest,
+    RebuildIndexRequest,
+)
 from adip.api.services import (
     check_model_connection,
     generation_eval_summary,
