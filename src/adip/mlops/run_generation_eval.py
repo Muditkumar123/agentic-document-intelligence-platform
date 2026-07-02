@@ -13,7 +13,11 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from adip.llmops.generation_eval import GenerationEvalReport, aggregate_eval, score_answer
+from adip.llmops.generation_eval import (
+    GenerationEvalReport,
+    aggregate_eval,
+    score_answer,
+)
 from adip.llmops.nli import DEFAULT_NLI_MODEL, NLIEntailmentScorer
 from adip.llmops.pipeline import generate_grounded_response
 from adip.mlops.tracking import start_run
