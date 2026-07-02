@@ -6,7 +6,7 @@
 # path is the deterministic extractive writer over a TF-IDF index).
 
 # ---------- builder ----------
-FROM python:3.10-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -24,7 +24,7 @@ COPY src ./src
 RUN pip install --no-deps .
 
 # ---------- runtime ----------
-FROM python:3.10-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
