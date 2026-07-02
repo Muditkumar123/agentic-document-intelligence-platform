@@ -287,6 +287,105 @@ def test_api_rebuild_index_runs_ingestion_and_indexing(tmp_path):
     assert index_path.exists()
 
 
+def test_api_list_documents_reports_index_status(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "indexed.md").write_text("Evidence text that will be indexed for retrieval.", encoding="utf-8")
+    (raw_dir / "ignored.zip").write_bytes(b"not a document")
+    chunks_path = tmp_path / "chunks.jsonl"
+    index_path = tmp_path / "index"
+    client = TestClient(create_app())
+    client.post(
+        "/pipeline/rebuild-index",
+        json={"input_path": str(raw_dir), "chunks_path": str(chunks_path), "index_path": str(index_path)},
+    )
+    (raw_dir / "pending.md").write_text("Uploaded after the rebuild, so not indexed yet.", encoding="utf-8")
+
+    response = client.get("/documents", params={"raw_dir": str(raw_dir), "index_path": str(index_path)})
+
+    payload = response.json()
+    assert response.status_code == 200
+    by_name = {item["filename"]: item for item in payload["items"]}
+    assert set(by_name) == {"indexed.md", "pending.md"}  # .zip is not listed
+    assert by_name["indexed.md"]["indexed"] is True
+    assert by_name["pending.md"]["indexed"] is False
+    assert payload["index_stale"] is True
+
+
+def test_api_list_documents_works_without_an_index(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "only.md").write_text("No index has been built yet.", encoding="utf-8")
+    client = TestClient(create_app())
+
+    response = client.get(
+        "/documents",
+        params={"raw_dir": str(raw_dir), "index_path": str(tmp_path / "missing_index")},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["document_count"] == 1
+    assert payload["items"][0]["indexed"] is False
+
+
+def test_api_delete_document_removes_file_and_flags_stale_index(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "doomed.md").write_text("This document will be deleted.", encoding="utf-8")
+    chunks_path = tmp_path / "chunks.jsonl"
+    index_path = tmp_path / "index"
+    client = TestClient(create_app())
+    client.post(
+        "/pipeline/rebuild-index",
+        json={"input_path": str(raw_dir), "chunks_path": str(chunks_path), "index_path": str(index_path)},
+    )
+
+    response = client.delete("/documents/doomed.md", params={"raw_dir": str(raw_dir)})
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["status"] == "deleted"
+    assert not (raw_dir / "doomed.md").exists()
+
+    listing = client.get(
+        "/documents", params={"raw_dir": str(raw_dir), "index_path": str(index_path)}
+    ).json()
+    assert listing["document_count"] == 0
+    assert listing["indexed_but_deleted"] == ["doomed.md"]
+    assert listing["index_stale"] is True
+
+    repeat = client.delete("/documents/doomed.md", params={"raw_dir": str(raw_dir)})
+    assert repeat.status_code == 404
+
+
+def test_api_delete_document_rejects_unsupported_type(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "config.yaml").write_text("secret: true", encoding="utf-8")
+    client = TestClient(create_app())
+
+    response = client.delete("/documents/config.yaml", params={"raw_dir": str(raw_dir)})
+
+    assert response.status_code == 400
+    assert (raw_dir / "config.yaml").exists()
+
+
+def test_delete_raw_document_cannot_escape_raw_dir(tmp_path):
+    from adip.api.services import delete_raw_document
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    outside = tmp_path / "escape.md"
+    outside.write_text("Lives outside the raw folder.", encoding="utf-8")
+
+    try:
+        delete_raw_document("../escape.md", raw_dir=raw_dir)
+    except FileNotFoundError:
+        pass  # the traversal component must be stripped, leaving a missing raw file
+    assert outside.exists()
+
+
 def test_retrieval_benchmark_summary_reads_selected_metrics(tmp_path):
     report_path = tmp_path / "report.json"
     metrics_path = tmp_path / "metrics.json"
