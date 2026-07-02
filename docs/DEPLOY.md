@@ -26,7 +26,7 @@ curl -fsS http://localhost:8010/health
 ## Image design
 
 - **Multi-stage build** ([infra/docker/Dockerfile](../infra/docker/Dockerfile)): a builder installs pinned runtime deps into a venv; the runtime stage copies only that venv plus the files needed to serve. No `dev`/test deps and no `torch`/`transformers` in the image.
-- **Pinned dependencies** ([infra/docker/requirements.lock.txt](../infra/docker/requirements.lock.txt)) for reproducible builds, on a pinned `python:3.10-slim-bookworm` base.
+- **Pinned dependencies** ([infra/docker/requirements.lock.txt](../infra/docker/requirements.lock.txt)) for reproducible builds, on a pinned `python:3.14-slim-bookworm` base.
 - **Non-root** runtime user (`appuser`, uid 10001).
 - **Healthcheck** hits `/health`; deploy platforms use the same path.
 - **Demo index baked in**: the build runs ingestion → retrieval eval → generation eval over the real public-document corpus (`data/eval/`), so the dashboard answers questions and shows Answer-Quality metrics immediately. The [entrypoint](../infra/docker/entrypoint.sh) rebuilds the index on first start if a mounted volume shadows it.

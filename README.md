@@ -250,7 +250,7 @@ The latest report is surfaced as the dashboard's **Answer Quality** tiles and `G
 
 Every push and pull request runs a [GitHub Actions pipeline](.github/workflows/ci.yml) with two stages:
 
-1. **Tests** — the full `pytest` suite across Python 3.10, 3.11, and 3.12, on a minimal dependency install (no torch/faiss/transformers needed).
+1. **Tests** — the full `pytest` suite across Python 3.10-3.14, on a minimal dependency install (no torch/faiss/transformers needed).
 2. **Eval quality gate** — rebuilds the index, runs the deterministic retrieval and answer-quality evaluations, then fails the build if any metric falls outside its threshold in [`ci/eval_thresholds.json`](ci/eval_thresholds.json).
 
 Because the baseline evals are deterministic, the gate is stable rather than flaky. Reproduce it locally:

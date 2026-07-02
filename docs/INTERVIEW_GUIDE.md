@@ -356,7 +356,7 @@ Concrete failure-and-fix stories. These answer "tell me about a hard bug you deb
 - Designed reproducible MLOps pipelines with tracked parameters, metrics, artifacts, DVC stages, and optional MLflow logging.
 - Hardened the hosted-LLM answer path: sanitized model continuation output and surfaced reasoning-token truncation warnings, each covered by regression tests.
 - Built a deterministic answer-quality evaluation (faithfulness, relevance, expected-fact coverage, citations) over a golden set, tracked as MLOps runs and surfaced on the dashboard.
-- Set up a GitHub Actions CI pipeline that runs the test suite across Python 3.10–3.12 and enforces retrieval and answer-quality thresholds as automated quality gates, failing the build on metric regressions.
+- Set up a GitHub Actions CI pipeline that runs the test suite across Python 3.10–3.14 and enforces retrieval and answer-quality thresholds as automated quality gates, failing the build on metric regressions.
 - Built a credibility-first evaluation corpus of real public documents (GDPR, IETF RFCs, NIST, SEC, arXiv) across five domains with 45 categorized golden questions, exposing per-category retrieval slices and gating CI on generation faithfulness rather than a saturated retrieval metric.
 - Completed the document lifecycle in the dashboard — upload, list with per-file index status, delete with path-traversal-safe validation, and a stale-index hint that prompts a rebuild whenever the corpus and index disagree.
 - Containerized the API + dashboard as a slim multi-stage Docker image (pinned deps, non-root, healthcheck, demo index baked in, `$PORT`-aware) with a one-click Render blueprint and a CI job that builds and smoke-tests the image on every push.
