@@ -75,7 +75,7 @@ When an intentional change moves the baseline (new documents, a retriever change
 
 ## Reproducing CI's Environment
 
-CI installs only the declared dependencies, which is stricter than a typical development environment. To catch undeclared imports before pushing (see Story 4 in [INTERVIEW_GUIDE.md](INTERVIEW_GUIDE.md)), verify in a clean venv:
+CI installs only the declared dependencies, which is stricter than a typical development environment. A fat dev environment can hide undeclared imports (this project once shipped a core `jinja2` import that was never declared — it only worked because the conda env happened to have it). To catch that class of bug before pushing, verify in a clean venv:
 
 ```bash
 python -m venv /tmp/ci_check
