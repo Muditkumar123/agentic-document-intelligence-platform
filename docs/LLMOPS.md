@@ -16,6 +16,7 @@ This phase adds prompt, model, generation, and quality tracking around the answe
 - Reasoning-block (`<think>`) stripping for both hosted and local reasoning models.
 - Deterministic answer-quality evaluation (faithfulness, relevance, expected-fact coverage, citations) over the golden set.
 - Evidence-gated abstention in two modes: a deterministic lexical score threshold (the CI gate) and an opt-in QNLI answer-entailment check (`--abstention-mode nli`); measured with refusal precision/recall over unanswerable questions (lexical 1.0/0.5, NLI 1.0/1.0 on the eval corpus).
+- Optional LLM-as-judge scoring (`--judge-model-name`) with lexical-vs-judge agreement metrics, behind the same report shape.
 - Structured verifier-output normalization for reasoning models.
 - LLMOps JSON reports.
 - MLOps-tracked LLMOps smoke command.
@@ -139,13 +140,45 @@ See [MODEL_PROFILES.md](MODEL_PROFILES.md).
 
 `python -m adip.mlops.run_generation_eval` scores generated answers over the golden Q&A set and logs a tracked MLOps run:
 
-- **faithfulness**: fraction of the answer's meaningful tokens grounded in the retrieved evidence (a lexical proxy; an LLM judge can replace it behind the same report shape). `None` for refusals.
+- **faithfulness**: fraction of the answer's meaningful tokens grounded in the retrieved evidence (a lexical proxy; the optional LLM judge below scores the same answers semantically for comparison). `None` for refusals.
 - **answer_relevance**: how much of the question the answer addresses.
 - **expected_coverage**: whether the answer surfaced the golden "expected" facts.
 - **citation_coverage**: are the retrieved citations visible in the answer.
 - **grounded_rate / refusal_rate**: share of answers above the grounding threshold, and how often the writer declined.
 
 It is deterministic with the extractive baseline (CI-safe) and can drive any hosted or local writer for model comparisons. The latest report is exposed at `GET /monitoring/generation-eval` and on the dashboard's **Answer Quality** tiles. See the tracked command in [../README.md](../README.md#answer-quality-evaluation).
+
+### LLM-as-Judge (optional second opinion)
+
+The lexical faithfulness score is a cheap proxy: reproducible and CI-safe, but blind to paraphrase and to subtle unsupported claims. An optional **model judge** scores the same answers semantically, behind the same report shape:
+
+```bash
+conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_eval \
+  --index data/processed/vector_index \
+  --golden data/eval/golden_qa.jsonl \
+  --judge-model-name gemini-2.5-flash \
+  --judge-endpoint-url https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
+  --judge-api-key "$GEMINI_API_KEY" \
+  --judge-limit 10
+```
+
+- The judge uses the versioned prompt `prompts/judge_v1.txt` (hashed like every other prompt) and any OpenAI-compatible endpoint; the API key is session-only and never logged or written to disk.
+- Each answered case gains `judge_faithfulness` / `judge_relevance`; refusals are skipped (judging a refusal's faithfulness is meaningless); a malformed judge response is counted as a failure, not a crash (reasoning blocks and markdown fences are tolerated, scores are clamped to [0, 1]).
+- The report adds `gen_eval_judge_mean_faithfulness`, `gen_eval_judge_mean_relevance`, and two **agreement** metrics against the lexical proxy: `gen_eval_judge_lexical_faithfulness_gap` (mean absolute difference) and `gen_eval_judge_lexical_correlation` (Pearson). A small gap/high correlation means the cheap CI proxy is trustworthy; divergence tells you exactly where it isn't.
+- Judge metrics appear **only when a judge ran**, so the deterministic CI gate and its metrics file are completely unaffected.
+
+**First live run** (gemini-2.5-flash judging the extractive baseline over the real-document corpus; 20 of 45 answers judged before the free-tier daily quota — every 429 was skipped gracefully, not fatally):
+
+| Metric | Lexical proxy | LLM judge |
+| --- | --- | --- |
+| mean faithfulness | 0.594 | **0.965** |
+| mean relevance | 0.909 | **0.338** |
+| faithfulness gap / correlation | — | 0.407 / ≈0 |
+
+Two findings the proxy could not see:
+
+1. The lexical proxy **systematically underestimates extractive faithfulness**: the writer copies evidence verbatim (nothing fabricated, judge ≈ 1.0), but headers and formatting tokens drag token-overlap down to ~0.6. The near-zero correlation confirms the proxy doesn't even rank cases the way the judge does for this writer.
+2. The judge exposed the extractive writer's **real weakness — relevance**: half of the judged answers scored ≤ 0.3 because the writer returns a *relevant chunk* without directly *answering the question*, while lexical answer-relevance said 1.0 (the answer echoes the question's words). This is the concrete argument for a generative writer over the extractive baseline.
 
 ## Current Limitation
 

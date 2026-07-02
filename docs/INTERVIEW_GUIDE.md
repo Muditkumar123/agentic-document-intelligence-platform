@@ -281,7 +281,7 @@ Answer: I retrieve source chunks, force cited answers, evaluate citation coverag
 
 Question: How do you evaluate answer quality, not just retrieval?
 
-Answer: I run a generation eval over the golden set that scores faithfulness (grounding in evidence), answer relevance, expected-fact coverage, and citation coverage, tracked as an MLOps run and surfaced on the dashboard. It is deterministic with the extractive baseline so it runs in CI, and the same harness can drive any hosted or local writer for model comparisons, with an LLM judge as a future upgrade.
+Answer: I run a generation eval over the golden set that scores faithfulness (grounding in evidence), answer relevance, expected-fact coverage, and citation coverage, tracked as an MLOps run and surfaced on the dashboard. It is deterministic with the extractive baseline so it runs in CI, and the same harness can drive any hosted or local writer for model comparisons. On top of that there's an optional LLM-as-judge pass: a model scores the same answers semantically behind the same report shape, and I compute agreement between the cheap lexical proxy and the judge (mean absolute gap and Pearson correlation) — so I can say how much the CI-safe metric can be trusted, and where it diverges. The judge is offline and opt-in, so CI stays deterministic.
 
 Question: Your retrieval hit rate is 1.0 — isn't that overfit / not meaningful?
 
@@ -358,6 +358,7 @@ Concrete failure-and-fix stories. These answer "tell me about a hard bug you deb
 - Built a deterministic answer-quality evaluation (faithfulness, relevance, expected-fact coverage, citations) over a golden set, tracked as MLOps runs and surfaced on the dashboard.
 - Set up a GitHub Actions CI pipeline that runs the test suite across Python 3.10–3.14 and enforces retrieval and answer-quality thresholds as automated quality gates, failing the build on metric regressions.
 - Built a credibility-first evaluation corpus of real public documents (GDPR, IETF RFCs, NIST, SEC, arXiv) across five domains with 45 categorized golden questions, exposing per-category retrieval slices and gating CI on generation faithfulness rather than a saturated retrieval metric.
+- Added an opt-in LLM-as-judge evaluation with lexical-vs-judge agreement metrics (mean gap, Pearson), quantifying how far the cheap CI-safe faithfulness proxy can be trusted while keeping CI fully deterministic.
 - Completed the document lifecycle in the dashboard — upload, list with per-file index status, delete with path-traversal-safe validation, and a stale-index hint that prompts a rebuild whenever the corpus and index disagree.
 - Containerized the API + dashboard as a slim multi-stage Docker image (pinned deps, non-root, healthcheck, demo index baked in, `$PORT`-aware) with a one-click Render blueprint and a CI job that builds and smoke-tests the image on every push.
 - Added evidence-gated abstention to the RAG writer in two modes — a deterministic lexical gate (in CI) and a QNLI answer-entailment check — measured with refusal precision/recall over unanswerable questions; the semantic check lifted recall from 0.5 to 1.0 at full precision.

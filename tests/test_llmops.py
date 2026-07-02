@@ -4,7 +4,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from adip.config.model_profiles import load_model_profile
 from adip.llmops.evaluation import evaluate_generation
-from adip.llmops.generation_eval import aggregate_eval, score_answer
+from adip.llmops.generation_eval import aggregate_eval, score_answer, with_judge
+from adip.llmops.judge import JudgeVerdict, LLMJudge, parse_judge_verdict
 from adip.llmops.models import clean_evidence_text
 from adip.llmops.pipeline import (
     evaluate_abstention,
@@ -659,6 +660,95 @@ def test_refusal_metrics_default_to_one_when_no_refusals_or_unanswerable():
     report = aggregate_eval([answered])
     assert report.refusal_precision == 1.0  # no false refusals possible
     assert report.refusal_recall == 1.0  # no unanswerable questions to catch
+
+
+def test_parse_judge_verdict_reads_clean_json():
+    verdict = parse_judge_verdict('{"faithfulness": 0.8, "relevance": 1.0, "unsupported_claims": ["extra fact"]}')
+    assert verdict.faithfulness == 0.8
+    assert verdict.relevance == 1.0
+    assert verdict.unsupported_claims == ["extra fact"]
+
+
+def test_parse_judge_verdict_tolerates_fences_prose_and_reasoning():
+    text = (
+        "<think>Let me check the claims one by one...</think>\n"
+        "Here is my verdict:\n```json\n"
+        '{"faithfulness": 1.4, "relevance": -0.2, "unsupported_claims": []}\n```'
+    )
+    verdict = parse_judge_verdict(text)
+    assert verdict.faithfulness == 1.0  # clamped into [0, 1]
+    assert verdict.relevance == 0.0
+    assert verdict.unsupported_claims == []
+
+
+def test_parse_judge_verdict_returns_none_on_garbage():
+    assert parse_judge_verdict("The answer looks fine to me.") is None
+    assert parse_judge_verdict('{"faithfulness": "high"}') is None
+    assert parse_judge_verdict("") is None
+
+
+def test_aggregate_eval_reports_judge_metrics_and_agreement():
+    grounded = score_answer(
+        "What does it achieve?",
+        "neural distinguisher achieves accuracy (c1).",
+        [{"citation": "c1", "text": "neural distinguisher achieves accuracy"}],
+    )
+    partial = score_answer(
+        "What is reported?",
+        "reported result plus a fabricated benchmark claim (c1).",
+        [{"citation": "c1", "text": "reported result"}],
+    )
+    grounded = with_judge(grounded, JudgeVerdict(0.9, 1.0, [], raw_text="{}"))
+    partial = with_judge(partial, JudgeVerdict(0.3, 0.8, ["fabricated benchmark"], raw_text="{}"))
+
+    report = aggregate_eval([grounded, partial])
+
+    assert report.judged_count == 2
+    assert report.judge_mean_faithfulness == 0.6
+    assert report.judge_mean_relevance == 0.9
+    assert report.judge_lexical_faithfulness_gap is not None
+    assert report.judge_lexical_correlation is not None
+    metrics = report.metrics()
+    assert metrics["gen_eval_judged_count"] == 2.0
+    assert metrics["gen_eval_judge_mean_faithfulness"] == 0.6
+
+
+def test_aggregate_eval_omits_judge_metrics_when_no_judge_ran():
+    case = score_answer("q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}])
+    report = aggregate_eval([case])
+    assert report.judged_count == 0
+    assert report.judge_mean_faithfulness is None
+    assert not any(key.startswith("gen_eval_judge") for key in report.metrics())
+
+
+def test_with_judge_is_noop_when_verdict_missing():
+    case = score_answer("q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}])
+    assert with_judge(case, None) is case
+
+
+def test_llm_judge_renders_prompt_and_parses_adapter_output(monkeypatch):
+    judge = LLMJudge(model_name="judge-model", endpoint_url="http://127.0.0.1:9/v1")
+    captured = {}
+
+    def fake_generate(request):
+        captured["prompt"] = request.prompt
+        return type(
+            "Resp",
+            (),
+            {"text": '{"faithfulness": 0.75, "relevance": 0.9, "unsupported_claims": []}'},
+        )()
+
+    monkeypatch.setattr(judge.adapter, "generate", fake_generate)
+    verdict = judge(
+        "What is TLS for?",
+        "TLS prevents eavesdropping (c1).",
+        [{"text": "TLS prevents eavesdropping, tampering, and forgery.", "citation": "c1"}],
+    )
+
+    assert verdict.faithfulness == 0.75
+    assert "What is TLS for?" in captured["prompt"]
+    assert "TLS prevents eavesdropping (c1)." in captured["prompt"]
+    assert "tampering" in captured["prompt"]  # evidence made it into the prompt
 
 
 def test_tracked_generation_eval_command(tmp_path):

@@ -141,6 +141,8 @@ The same golden set drives answer-quality (generation) evaluation, not just retr
 
 It is deterministic with the extractive baseline, so the numbers are reproducible in CI, and any hosted or local writer can be swapped in for model comparisons. On the **real public-document corpus** (`data/eval/`) the baseline scores about 0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage — see the table above. The latest report is exposed at `GET /monitoring/generation-eval` and on the dashboard's Answer Quality tiles.
 
+An optional **LLM-as-judge** pass (`--judge-model-name ...`) scores the same answers semantically and reports agreement with the lexical proxy (mean absolute gap + Pearson correlation) — see [LLMOPS.md](LLMOPS.md#llm-as-judge-optional-second-opinion). Judge metrics appear only when a judge ran, so CI stays deterministic.
+
 ## Interview Talking Point
 
 The dataset is small but intentionally structured. It lets the project test retrieval, citations, LLMOps, and AgentOps end to end before scaling to a larger document collection.
