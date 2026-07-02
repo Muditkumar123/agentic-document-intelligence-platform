@@ -374,13 +374,10 @@ Recommended dashboard setup for readable local LLM answers:
 - Reasoning model: `deepseek_r1_distill_qwen_14b_reasoning`
 - Device: `CUDA 1`
 
-## Study And Interview Notes
+## Project Notes
 
-- [docs/TOPICS_TO_LEARN.md](docs/TOPICS_TO_LEARN.md): checklist of concepts to learn for this project.
-- [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): topics to study for understanding the project deeply.
-- [docs/INTERVIEW_GUIDE.md](docs/INTERVIEW_GUIDE.md): what we built, why we built it, and how to explain it in interviews.
 - [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md): current sample corpus, golden QA set, and benchmark meaning.
-- [docs/FIXES.md](docs/FIXES.md): problems found in the LLM answer path and how they were fixed, with regression tests — useful for debugging-story interview questions.
+- [docs/FIXES.md](docs/FIXES.md): problems found in the LLM answer path and how they were fixed, with regression tests.
 
 ## Planned Stack
 
@@ -407,7 +404,6 @@ Agentic Document Intelligence Platform/
     DOCKER_DEMO.md
     EVALUATION_DATASET.md
     FIXES.md
-    INTERVIEW_GUIDE.md
     LLMOPS.md
     MODEL_PROFILES.md
     MLOPS.md
@@ -415,8 +411,6 @@ Agentic Document Intelligence Platform/
     QWEN3_LOCAL_SMOKE.md
     ROADMAP.md
     SERVING.md
-    STUDY_GUIDE.md
-    TOPICS_TO_LEARN.md
   src/adip/
     agents/
     api/
