@@ -1,6 +1,9 @@
 # Agentic Document Intelligence Platform
 
 [![CI](https://github.com/Muditkumar123/agentic-document-intelligence-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Muditkumar123/agentic-document-intelligence-platform/actions/workflows/ci.yml)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-onrender.com-2dd4bf?logo=render&logoColor=white)](https://agentic-document-intelligence.onrender.com)
+
+**Live demo:** [agentic-document-intelligence.onrender.com](https://agentic-document-intelligence.onrender.com) — free tier, so the first load after idle takes up to a minute while the instance wakes.
 
 A domain-adaptive document intelligence system that combines NLP, LLMs, agentic workflows, and MLOps/LLMOps/AgentOps practices into one resume-grade project.
 
