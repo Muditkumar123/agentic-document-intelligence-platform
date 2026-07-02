@@ -38,6 +38,8 @@ curl -fsS http://localhost:8010/health
 
 The repo includes a [`render.yaml`](../render.yaml) blueprint. In the Render dashboard: **New + → Blueprint** → point it at this repo. Render builds the Dockerfile, injects `$PORT`, and health-checks `/health`. `autoDeploy` redeploys on every push to `main`.
 
+The production instance is live at **https://agentic-document-intelligence.onrender.com** (free tier: spins down after ~15 minutes idle; the first request after that takes up to a minute).
+
 ### Fly.io
 
 ```bash
