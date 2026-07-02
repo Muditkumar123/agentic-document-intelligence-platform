@@ -167,6 +167,19 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_e
 - The report adds `gen_eval_judge_mean_faithfulness`, `gen_eval_judge_mean_relevance`, and two **agreement** metrics against the lexical proxy: `gen_eval_judge_lexical_faithfulness_gap` (mean absolute difference) and `gen_eval_judge_lexical_correlation` (Pearson). A small gap/high correlation means the cheap CI proxy is trustworthy; divergence tells you exactly where it isn't.
 - Judge metrics appear **only when a judge ran**, so the deterministic CI gate and its metrics file are completely unaffected.
 
+**First live run** (gemini-2.5-flash judging the extractive baseline over the real-document corpus; 20 of 45 answers judged before the free-tier daily quota — every 429 was skipped gracefully, not fatally):
+
+| Metric | Lexical proxy | LLM judge |
+| --- | --- | --- |
+| mean faithfulness | 0.594 | **0.965** |
+| mean relevance | 0.909 | **0.338** |
+| faithfulness gap / correlation | — | 0.407 / ≈0 |
+
+Two findings the proxy could not see:
+
+1. The lexical proxy **systematically underestimates extractive faithfulness**: the writer copies evidence verbatim (nothing fabricated, judge ≈ 1.0), but headers and formatting tokens drag token-overlap down to ~0.6. The near-zero correlation confirms the proxy doesn't even rank cases the way the judge does for this writer.
+2. The judge exposed the extractive writer's **real weakness — relevance**: half of the judged answers scored ≤ 0.3 because the writer returns a *relevant chunk* without directly *answering the question*, while lexical answer-relevance said 1.0 (the answer echoes the question's words). This is the concrete argument for a generative writer over the extractive baseline.
+
 ## Current Limitation
 
 This phase establishes LLMOps plumbing and grounded generation quality checks. See [SERVING.md](SERVING.md) for the local serving layer.
