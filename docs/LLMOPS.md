@@ -180,6 +180,32 @@ Two findings the proxy could not see:
 1. The lexical proxy **systematically underestimates extractive faithfulness**: the writer copies evidence verbatim (nothing fabricated, judge ≈ 1.0), but headers and formatting tokens drag token-overlap down to ~0.6. The near-zero correlation confirms the proxy doesn't even rank cases the way the judge does for this writer.
 2. The judge exposed the extractive writer's **real weakness — relevance**: half of the judged answers scored ≤ 0.3 because the writer returns a *relevant chunk* without directly *answering the question*, while lexical answer-relevance said 1.0 (the answer echoes the question's words). This is the concrete argument for a generative writer over the extractive baseline.
 
+### Local judge and inter-judge agreement
+
+The judge works against any OpenAI-compatible endpoint, including the project's own local serving layer — so full-coverage judging needs no API key at all:
+
+```bash
+# terminal 1: serve a local model
+conda run -n crypto_env env PYTHONPATH=src python -m adip.serving server \
+  --model-profile qwen3_8b_default --port 8091
+
+# terminal 2: judge with it
+conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_eval \
+  --index data/processed/vector_index --golden data/eval/golden_qa.jsonl \
+  --abstention-threshold 0.10 \
+  --judge-model-name "Qwen/Qwen3-8B" --judge-endpoint-url http://127.0.0.1:8091/v1 \
+  --judge-max-new-tokens 2048
+```
+
+A full 50-case run with a local Qwen3-8B judge (no quota, no cost) enabled the standard reliability check a single judge can't give you — **inter-judge agreement**, computed per-case against gemini-2.5-flash on the 20 answers both judged:
+
+| Dimension | Qwen↔Gemini mean gap | Pearson | Reading |
+| --- | --- | --- | --- |
+| relevance | 0.222 | **0.615** | judges broadly agree (Qwen 0.40 vs Gemini 0.34 mean) — the "extractive writer has weak relevance" finding is robust across judges |
+| faithfulness | 0.585 | **≈ 0** | judges fundamentally disagree (Qwen 0.40 vs Gemini 0.97 mean) — the 8B judge's faithfulness scores are not trustworthy for this writer |
+
+Interpretation: for verbatim-extractive answers, Gemini's ~1.0 faithfulness is almost certainly correct (nothing is fabricated), so the local 8B judge's low scores look like dimension bleed — punishing "doesn't fully answer the question" inside the faithfulness score. Practical policy that follows: a small local judge is usable for **relevance-style** dimensions and for cheap full-coverage sweeps, but **faithfulness judging needs a stronger model** — and inter-judge agreement is precisely the measurement that tells you which is which.
+
 ## Current Limitation
 
 This phase establishes LLMOps plumbing and grounded generation quality checks. See [SERVING.md](SERVING.md) for the local serving layer.
