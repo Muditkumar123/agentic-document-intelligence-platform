@@ -16,15 +16,21 @@ from typing import Sequence
 from adip.llmops.generation_eval import (
     GenerationEvalReport,
     aggregate_eval,
+    attach_ragas_scores,
     score_answer,
     with_judge,
 )
 from adip.llmops.judge import DEFAULT_JUDGE_MAX_NEW_TOKENS, LLMJudge
 from adip.llmops.nli import DEFAULT_NLI_MODEL, NLIEntailmentScorer
 from adip.llmops.pipeline import generate_grounded_response
+from adip.llmops.ragas_eval import (
+    DEFAULT_RAGAS_EMBEDDING_MODEL,
+    RagasEvaluator,
+    build_ragas_row,
+)
 from adip.mlops.tracking import start_run
 from adip.rag.evaluate import read_golden
-from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results
+from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
 from adip.rag.retriever import load_index
 
 
@@ -67,6 +73,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--judge-api-key", default=None)
     parser.add_argument("--judge-max-new-tokens", type=int, default=DEFAULT_JUDGE_MAX_NEW_TOKENS)
     parser.add_argument("--judge-limit", type=int, default=0, help="Judge at most N answers (0 = all).")
+    # Optional standardized RAGAS metrics (offline; never part of the CI gate).
+    # Requires the [ragas] extra. The API key is session-only and never logged.
+    parser.add_argument("--ragas-model-name", default=None)
+    parser.add_argument("--ragas-endpoint-url", default=None)
+    parser.add_argument("--ragas-api-key", default=None)
+    parser.add_argument("--ragas-embedding-model", default=DEFAULT_RAGAS_EMBEDDING_MODEL)
+    parser.add_argument("--ragas-limit", type=int, default=0, help="RAGAS-score at most N answers (0 = all).")
     # Scoring thresholds.
     parser.add_argument("--grounded-threshold", type=float, default=0.5)
     parser.add_argument("--substring-overlap-threshold", type=float, default=0.6)
@@ -82,9 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
 def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
     index = load_index(args.index)
     golden = read_golden(args.golden)
-    resolved_candidate_k = args.candidate_k or args.top_k
-    if resolved_candidate_k < args.top_k:
-        raise ValueError("candidate_k must be greater than or equal to top_k")
+    resolved_candidate_k = resolve_candidate_k(args.top_k, args.candidate_k, args.reranker)
 
     entailment_scorer = None
     if args.abstention_threshold is not None and args.abstention_mode == "nli":
@@ -103,8 +114,18 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
             max_new_tokens=args.judge_max_new_tokens,
         )
 
+    ragas_scorer = None
+    if args.ragas_model_name:
+        ragas_scorer = RagasEvaluator(
+            model_name=args.ragas_model_name,
+            endpoint_url=args.ragas_endpoint_url,
+            api_key=args.ragas_api_key,
+            embedding_model=args.ragas_embedding_model,
+        )
+
     judged_so_far = 0
     cases = []
+    ragas_rows: list[dict | None] = []
     for row in golden:
         candidates = index.search(row["question"], top_k=resolved_candidate_k)
         retrieved = rerank_results(
@@ -158,6 +179,29 @@ def evaluate_answer_quality(args: argparse.Namespace) -> GenerationEvalReport:
                 judged_so_far += 1
             case = with_judge(case, verdict)
         cases.append(case)
+
+        should_ragas = (
+            ragas_scorer is not None
+            and not case.refusal  # RAGAS scores answers; refusals have nothing to score
+            and (
+                args.ragas_limit <= 0
+                or sum(1 for existing in ragas_rows if existing is not None) < args.ragas_limit
+            )
+        )
+        if should_ragas:
+            ragas_rows.append(
+                build_ragas_row(
+                    row["question"],
+                    result.answer,
+                    result.evidence,
+                    row.get("expected_substrings"),
+                )
+            )
+        else:
+            ragas_rows.append(None)
+
+    if ragas_scorer is not None:
+        cases = attach_ragas_scores(cases, ragas_rows, ragas_scorer)
     return aggregate_eval(cases)
 
 
@@ -188,6 +232,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "nli_model": args.nli_model if args.abstention_mode == "nli" else "",
                 "judge_model_name": args.judge_model_name or "",
                 "judge_limit": args.judge_limit,
+                "ragas_model_name": args.ragas_model_name or "",
+                "ragas_embedding_model": args.ragas_embedding_model if args.ragas_model_name else "",
+                "ragas_limit": args.ragas_limit,
                 "grounded_threshold": args.grounded_threshold,
                 "substring_overlap_threshold": args.substring_overlap_threshold,
             }

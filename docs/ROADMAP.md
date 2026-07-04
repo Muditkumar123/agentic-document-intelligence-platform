@@ -94,6 +94,7 @@ Goal: demonstrate practical LLM deployment and evaluation on a 40 GB GPU.
 - Add prompt template versioning. Status: done.
 - Add golden Q&A regression tests. Status: RAG golden set exists; LLMOps smoke tests added.
 - Add citation and faithfulness checks. Status: citation coverage and unsupported sentence checks added.
+- Add standardized evaluation. Status: done — optional RAGAS integration (`[ragas]` extra) scores faithfulness, answer relevancy, context precision, and context recall behind the same report shape, with three-way faithfulness agreement (RAGAS vs lexical proxy vs LLM judge); see LLMOPS.md.
 
 Deliverable:
 

@@ -206,6 +206,56 @@ A full 50-case run with a local Qwen3-8B judge (no quota, no cost) enabled the s
 
 Interpretation: for verbatim-extractive answers, Gemini's ~1.0 faithfulness is almost certainly correct (nothing is fabricated), so the local 8B judge's low scores look like dimension bleed — punishing "doesn't fully answer the question" inside the faithfulness score. Practical policy that follows: a small local judge is usable for **relevance-style** dimensions and for cheap full-coverage sweeps, but **faithfulness judging needs a stronger model** — and inter-judge agreement is precisely the measurement that tells you which is which.
 
+### Standardized RAGAS metrics (optional)
+
+The deterministic eval and the LLM judge are project-specific scorers. [RAGAS](https://docs.ragas.io/) adds the **industry-standard** versions of the same questions, so results can be compared against other RAG systems using shared metric definitions:
+
+- **faithfulness** — is every claim in the answer supported by the retrieved contexts?
+- **answer_relevancy** — does the answer actually address the question? (uses embeddings)
+- **context_precision** — are the retrieved chunks relevant to the question?
+- **context_recall** — do the retrieved chunks contain what the reference answer needs?
+
+The two context metrics matter here specifically: hit@k and MRR are **saturated at 1.0** on the current golden set, while RAGAS's context metrics are graded (0–1 per case), so they can still discriminate retrieval quality.
+
+**Install and run.** RAGAS is an optional extra (heavy: langchain + datasets; the pins in `pyproject.toml` matter — ragas 0.4 still imports from the langchain-community 0.3 line) and never part of the CI gate:
+
+```bash
+pip install -e ".[ragas]"
+
+# terminal 1: serve a local model (or use any hosted OpenAI-compatible endpoint)
+conda run -n crypto_env env PYTHONPATH=src python -m adip.serving server \
+  --model-profile qwen3_8b_default --port 8091
+
+# terminal 2: generation eval with RAGAS attached
+conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_eval \
+  --index data/processed/vector_index --golden data/eval/golden_qa.jsonl \
+  --abstention-threshold 0.10 \
+  --ragas-model-name "Qwen/Qwen3-8B" --ragas-endpoint-url http://127.0.0.1:8091/v1 \
+  --ragas-limit 10
+```
+
+- The LLM is fully configurable (`--ragas-model-name` / `--ragas-endpoint-url` / `--ragas-api-key`); the key is session-only and never logged or written to disk. Embeddings for `answer_relevancy` use a **local** sentence-transformers model (`--ragas-embedding-model`, default `all-MiniLM-L6-v2`), so no second API key is needed.
+- Model policy (from the inter-judge agreement study above): a local 8B-class model is acceptable for **relevance-style** metrics and cheap full-coverage sweeps; **faithfulness-style** judging benefits from a stronger model — treat local-8B RAGAS faithfulness with the same caution as local-8B judge faithfulness.
+- Refusals are skipped (nothing to score); per-case failures come back as `None` and reduce coverage instead of crashing; a whole-batch endpoint failure is logged and skipped.
+- The report gains `gen_eval_ragas_*` metrics — means for the four RAGAS metrics plus **three-way agreement** on faithfulness: RAGAS-vs-lexical and RAGAS-vs-judge gap and Pearson correlation. Like the judge, RAGAS keys appear **only when RAGAS ran**, so the deterministic CI gate and its metrics file are unaffected. Everything is logged through the same MLOps `start_run` tracking (params: model, embedding model, limit — never the key) and lands in MLflow when `--enable-mlflow` is set.
+
+**First live run** (extractive baseline over the real-document corpus; 10 answers scored end-to-end by a local Qwen/Qwen3-8B via `adip.serving`, zero failed jobs):
+
+| RAGAS metric | Mean | Reading |
+| --- | --- | --- |
+| faithfulness | **0.925** | agrees with the Gemini judge (~0.97): verbatim-extractive answers fabricate nothing |
+| answer_relevancy | 1.000 | saturated — see caveat below |
+| context_precision | 1.000 | retrieved chunks are relevant (consistent with saturated hit@k) |
+| context_recall | 1.000 | golden evidence present in contexts (consistent with saturated MRR) |
+| lexical-vs-RAGAS faithfulness gap / correlation | 0.313 / ≈0 | independently confirms the judge-run finding: the lexical proxy underestimates extractive faithfulness |
+
+Two observations worth keeping:
+
+1. **Metric design beats judge size for faithfulness.** The same local 8B that scored faithfulness 0.40 as a free-form judge scores 0.925 through RAGAS — because RAGAS decomposes the answer into individual claims and verifies each against the contexts, leaving no room for the "doesn't fully answer the question" dimension bleed. Structured decomposition rescued the small model.
+2. **Treat `answer_relevancy` = 1.0 with suspicion here.** RAGAS computes it by asking the LLM to regenerate questions from the answer and embedding-comparing them to the real question; extractive answers echo the question's own vocabulary, and the local server returns 1 generation where RAGAS requests 3 (logged as a warning, handled gracefully), reducing this to a single-sample estimate. The Gemini judge's 0.34 relevance remains the more discerning verdict on the extractive writer.
+
+RAGAS timing note: faithfulness and context_precision run multi-call LLM chains per case, which queue on a single local server — the adapter therefore raises RAGAS's per-job timeout (180s default → 600s, `RagasEvaluator(timeout=...)`) and caps concurrency (`max_workers=4`). With the defaults, 10 cases take a few minutes on one A100.
+
 ## Current Limitation
 
 This phase establishes LLMOps plumbing and grounded generation quality checks. See [SERVING.md](SERVING.md) for the local serving layer.
