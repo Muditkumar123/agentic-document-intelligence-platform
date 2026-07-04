@@ -14,6 +14,23 @@ from adip.rag.retriever import RetrievedChunk
 TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
 SUPPORTED_RERANKERS = {"none", "lexical", "cross_encoder"}
 DEFAULT_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+MIN_RERANK_CANDIDATES = 10
+
+
+def resolve_candidate_k(top_k: int, candidate_k: int | None, reranker: str) -> int:
+    """First-stage candidate count.
+
+    An explicit ``candidate_k`` always wins. Otherwise a reranker gets a wider
+    candidate pool (3x top_k, at least ``MIN_RERANK_CANDIDATES``) — reranking only
+    the final ``top_k`` can merely reorder it, never recover a missed chunk.
+    """
+    if candidate_k is not None:
+        if candidate_k < top_k:
+            raise ValueError("candidate_k must be greater than or equal to top_k")
+        return candidate_k
+    if reranker == "none":
+        return top_k
+    return max(top_k * 3, MIN_RERANK_CANDIDATES)
 
 
 def rerank_results(

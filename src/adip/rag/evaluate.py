@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Sequence
 
-from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results
+from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
 from adip.rag.retriever import load_index
 
 
@@ -102,9 +102,7 @@ def evaluate(
     reciprocal_ranks: list[float] = []
     query_latencies: list[float] = []
     start_time = time.perf_counter()
-    resolved_candidate_k = candidate_k or top_k
-    if resolved_candidate_k < top_k:
-        raise ValueError("candidate_k must be greater than or equal to top_k")
+    resolved_candidate_k = resolve_candidate_k(top_k, candidate_k, reranker)
 
     for row in golden:
         # Unanswerable rows have no correct chunk to retrieve; they are scored by the

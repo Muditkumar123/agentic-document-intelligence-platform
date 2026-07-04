@@ -15,9 +15,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 from sklearn.preprocessing import normalize
 
+from adip.rag.bm25 import DEFAULT_BM25_B, DEFAULT_BM25_K1, Bm25Index, build_bm25_index
+
 INDEX_FILENAME = "rag_index.pkl"
 FAISS_INDEX_FILENAME = "faiss.index"
 DENSE_BACKENDS = {"dense", "dense_lsa", "sentence_transformers"}
+HYBRID_BACKEND = "hybrid"
+DEFAULT_RRF_K = 60
+DEFAULT_HYBRID_DENSE_WEIGHT = 0.5
 GENERIC_DOCUMENT_NOUNS = {
     "doc",
     "document",
@@ -95,6 +100,9 @@ class RagIndex:
     embedding_model: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     faiss_index: Any | None = None
+    bm25: Bm25Index | None = None
+    rrf_k: int = DEFAULT_RRF_K
+    hybrid_dense_weight: float = DEFAULT_HYBRID_DENSE_WEIGHT
 
     @property
     def vocabulary_size(self) -> int:
@@ -114,6 +122,8 @@ class RagIndex:
             return self._search_tfidf(question, top_k, document_filter=document_filter)
         if self.backend in DENSE_BACKENDS:
             return self._search_dense(question, top_k, document_filter=document_filter)
+        if self.backend == HYBRID_BACKEND:
+            return self._search_hybrid(question, top_k, document_filter=document_filter)
         raise ValueError(f"Unsupported index backend: {self.backend}")
 
     def _search_tfidf(
@@ -176,6 +186,41 @@ class RagIndex:
             if int(index) < 0:
                 continue
             results.append(RetrievedChunk(chunk=self.chunks[int(index)], score=float(score), rank=rank))
+        if not results:
+            fallback_chunks = [self.chunks[int(index)] for index in candidate_indices]
+            return self._single_document_fallback(question, top_k, chunks=fallback_chunks)
+        return results
+
+    def _search_hybrid(
+        self,
+        question: str,
+        top_k: int,
+        document_filter: str | None = None,
+    ) -> list[RetrievedChunk]:
+        if self.bm25 is None:
+            raise ValueError("Hybrid index is missing its BM25 component")
+        candidate_indices = self._candidate_indices(document_filter)
+        if not candidate_indices:
+            return []
+
+        bm25_scores = self.bm25.scores(question)
+        dense_query = self._embed_query(question)
+        dense_scores = np.matmul(self.matrix, dense_query[0])
+        dense_weight = self.hybrid_dense_weight
+        fused = reciprocal_rank_fusion(
+            score_lists=[bm25_scores, dense_scores],
+            weights=[1.0 - dense_weight, dense_weight],
+            candidate_indices=candidate_indices,
+            rrf_k=self.rrf_k,
+        )
+
+        top_indices = sorted(candidate_indices, key=lambda index: fused[index], reverse=True)[:top_k]
+        results: list[RetrievedChunk] = []
+        for rank, index in enumerate(top_indices, start=1):
+            score = float(fused[index])
+            if score <= 0:
+                continue
+            results.append(RetrievedChunk(chunk=self.chunks[int(index)], score=score, rank=rank))
         if not results:
             fallback_chunks = [self.chunks[int(index)] for index in candidate_indices]
             return self._single_document_fallback(question, top_k, chunks=fallback_chunks)
@@ -246,6 +291,8 @@ def build_index(
     embedding_model: str = "lsa",
     dense_dimensions: int = 128,
     use_faiss: bool = True,
+    rrf_k: int = DEFAULT_RRF_K,
+    hybrid_dense_weight: float = DEFAULT_HYBRID_DENSE_WEIGHT,
 ) -> RagIndex:
     if backend == "tfidf":
         return build_tfidf_index(chunks, ngram_max=ngram_max)
@@ -256,7 +303,95 @@ def build_index(
             dense_dimensions=dense_dimensions,
             use_faiss=use_faiss,
         )
+    if backend == HYBRID_BACKEND:
+        return build_hybrid_index(
+            chunks,
+            embedding_model=embedding_model,
+            dense_dimensions=dense_dimensions,
+            rrf_k=rrf_k,
+            hybrid_dense_weight=hybrid_dense_weight,
+        )
     raise ValueError(f"Unsupported backend: {backend}")
+
+
+def reciprocal_rank_fusion(
+    score_lists: list[np.ndarray],
+    weights: list[float],
+    candidate_indices: list[int],
+    rrf_k: int = DEFAULT_RRF_K,
+) -> dict[int, float]:
+    """Weighted reciprocal-rank fusion over the candidate set.
+
+    Rank positions (not raw score magnitudes) drive the fusion, so BM25 and cosine
+    scores need no scale calibration. Documents with a non-positive score in a
+    component contribute nothing from that component, so a query with no term
+    overlap cannot be promoted by its BM25 rank alone. Scores are normalized so a
+    document ranked first in every component scores 1.0.
+    """
+    if len(score_lists) != len(weights):
+        raise ValueError("score_lists and weights must have the same length")
+    if rrf_k < 1:
+        raise ValueError("rrf_k must be greater than or equal to 1")
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        raise ValueError("weights must sum to a positive value")
+
+    fused = {index: 0.0 for index in candidate_indices}
+    for scores, weight in zip(score_lists, weights):
+        if weight <= 0:
+            continue
+        ordered = sorted(candidate_indices, key=lambda index: scores[index], reverse=True)
+        for rank, index in enumerate(ordered, start=1):
+            if scores[index] <= 0:
+                continue
+            fused[index] += weight / (rrf_k + rank)
+    normalizer = (rrf_k + 1) / total_weight
+    return {index: score * normalizer for index, score in fused.items()}
+
+
+def build_hybrid_index(
+    chunks: list[dict[str, Any]],
+    embedding_model: str = "lsa",
+    dense_dimensions: int = 128,
+    rrf_k: int = DEFAULT_RRF_K,
+    hybrid_dense_weight: float = DEFAULT_HYBRID_DENSE_WEIGHT,
+    bm25_k1: float = DEFAULT_BM25_K1,
+    bm25_b: float = DEFAULT_BM25_B,
+) -> RagIndex:
+    if not 0.0 <= hybrid_dense_weight <= 1.0:
+        raise ValueError("hybrid_dense_weight must be between 0 and 1")
+
+    texts = [chunk["text"] for chunk in chunks]
+    bm25 = build_bm25_index(texts, k1=bm25_k1, b=bm25_b)
+    if embedding_model == "lsa":
+        vectorizer, svd, matrix = build_lsa_embeddings(texts, dense_dimensions=dense_dimensions)
+    else:
+        vectorizer = None
+        svd = None
+        matrix = encode_with_sentence_transformers(texts, embedding_model)
+
+    return RagIndex(
+        backend=HYBRID_BACKEND,
+        vectorizer=vectorizer,
+        matrix=matrix,
+        chunks=chunks,
+        svd=svd,
+        embedding_model=embedding_model,
+        bm25=bm25,
+        rrf_k=rrf_k,
+        hybrid_dense_weight=hybrid_dense_weight,
+        metadata={
+            "retrieval_backend": HYBRID_BACKEND,
+            "fusion": "weighted_rrf",
+            "rrf_k": rrf_k,
+            "hybrid_dense_weight": hybrid_dense_weight,
+            "bm25_k1": bm25_k1,
+            "bm25_b": bm25_b,
+            "embedding_model": embedding_model,
+            "dense_dimensions": int(matrix.shape[1]) if len(matrix.shape) == 2 else 0,
+            "matrix_shape": tuple(matrix.shape),
+        },
+    )
 
 
 def build_tfidf_index(chunks: list[dict[str, Any]], ngram_max: int = 2) -> RagIndex:
@@ -490,7 +625,7 @@ def normalized_backend_name(backend: str) -> str:
 
 
 def validate_backend(backend: str) -> None:
-    if backend not in {"tfidf"} | DENSE_BACKENDS:
+    if backend not in {"tfidf", HYBRID_BACKEND} | DENSE_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}")
 
 
