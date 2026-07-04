@@ -21,6 +21,7 @@ from typing import Any
 from adip.llmops.evaluation import evaluate_generation
 from adip.llmops.judge import JudgeVerdict
 from adip.llmops.models import meaningful_terms
+from adip.llmops.ragas_eval import RagasScorer, RagasScores
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,10 @@ class GenerationEvalCase:
     answerable: bool = True
     judge_faithfulness: float | None = None
     judge_relevance: float | None = None
+    ragas_faithfulness: float | None = None
+    ragas_answer_relevancy: float | None = None
+    ragas_context_precision: float | None = None
+    ragas_context_recall: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -47,6 +52,43 @@ def with_judge(case: GenerationEvalCase, verdict: JudgeVerdict | None) -> Genera
     if verdict is None:
         return case
     return replace(case, judge_faithfulness=verdict.faithfulness, judge_relevance=verdict.relevance)
+
+
+def with_ragas(case: GenerationEvalCase, scores: RagasScores | None) -> GenerationEvalCase:
+    """Attach RAGAS metric values to a scored case (no-op when scoring failed)."""
+    if scores is None:
+        return case
+    return replace(
+        case,
+        ragas_faithfulness=scores.faithfulness,
+        ragas_answer_relevancy=scores.answer_relevancy,
+        ragas_context_precision=scores.context_precision,
+        ragas_context_recall=scores.context_recall,
+    )
+
+
+def attach_ragas_scores(
+    cases: list[GenerationEvalCase],
+    rows: list[dict[str, Any] | None],
+    scorer: RagasScorer,
+) -> list[GenerationEvalCase]:
+    """Score cases with RAGAS in one batch and attach the results.
+
+    ``rows[i]`` is the RAGAS input for ``cases[i]`` or None to skip that case
+    (refusals, or cases beyond the run's --ragas-limit). The scorer is called
+    once with the non-None rows; failures come back as None and leave the case
+    untouched, so a partial RAGAS outage degrades coverage instead of crashing.
+    """
+    if len(cases) != len(rows):
+        raise ValueError("cases and rows must have the same length")
+    indexed = [(position, row) for position, row in enumerate(rows) if row is not None]
+    if not indexed:
+        return list(cases)
+    scores = scorer([row for _, row in indexed])
+    updated = list(cases)
+    for (position, _), case_scores in zip(indexed, scores):
+        updated[position] = with_ragas(updated[position], case_scores)
+    return updated
 
 
 @dataclass(frozen=True)
@@ -68,6 +110,15 @@ class GenerationEvalReport:
     judge_mean_relevance: float | None = None
     judge_lexical_faithfulness_gap: float | None = None
     judge_lexical_correlation: float | None = None
+    ragas_scored_count: int = 0
+    ragas_mean_faithfulness: float | None = None
+    ragas_mean_answer_relevancy: float | None = None
+    ragas_mean_context_precision: float | None = None
+    ragas_mean_context_recall: float | None = None
+    ragas_lexical_faithfulness_gap: float | None = None
+    ragas_lexical_correlation: float | None = None
+    ragas_judge_faithfulness_gap: float | None = None
+    ragas_judge_correlation: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -98,6 +149,20 @@ class GenerationEvalReport:
                 values["gen_eval_judge_lexical_faithfulness_gap"] = self.judge_lexical_faithfulness_gap
             if self.judge_lexical_correlation is not None:
                 values["gen_eval_judge_lexical_correlation"] = self.judge_lexical_correlation
+        # RAGAS metrics likewise appear only when RAGAS actually scored something.
+        if self.ragas_scored_count:
+            values["gen_eval_ragas_scored_count"] = float(self.ragas_scored_count)
+            optional = {
+                "gen_eval_ragas_mean_faithfulness": self.ragas_mean_faithfulness,
+                "gen_eval_ragas_mean_answer_relevancy": self.ragas_mean_answer_relevancy,
+                "gen_eval_ragas_mean_context_precision": self.ragas_mean_context_precision,
+                "gen_eval_ragas_mean_context_recall": self.ragas_mean_context_recall,
+                "gen_eval_ragas_lexical_faithfulness_gap": self.ragas_lexical_faithfulness_gap,
+                "gen_eval_ragas_lexical_correlation": self.ragas_lexical_correlation,
+                "gen_eval_ragas_judge_faithfulness_gap": self.ragas_judge_faithfulness_gap,
+                "gen_eval_ragas_judge_correlation": self.ragas_judge_correlation,
+            }
+            values.update({key: value for key, value in optional.items() if value is not None})
         return values
 
 
@@ -206,6 +271,36 @@ def aggregate_eval(cases: list[GenerationEvalCase]) -> GenerationEvalReport:
     gap = _mean([abs(lexical - judge) for lexical, judge in paired]) if paired else None
     correlation = _pearson(paired)
 
+    # RAGAS aggregates and three-way agreement: RAGAS faithfulness vs the lexical
+    # proxy and vs the LLM judge, over cases where both sides scored.
+    ragas_scored = [
+        case
+        for case in cases
+        if any(
+            value is not None
+            for value in (
+                case.ragas_faithfulness,
+                case.ragas_answer_relevancy,
+                case.ragas_context_precision,
+                case.ragas_context_recall,
+            )
+        )
+    ]
+
+    def _mean_or_none(values: list[float]) -> float | None:
+        return _mean(values) if values else None
+
+    ragas_lexical_pairs = [
+        (case.faithfulness, case.ragas_faithfulness)
+        for case in cases
+        if case.faithfulness is not None and case.ragas_faithfulness is not None
+    ]
+    ragas_judge_pairs = [
+        (case.judge_faithfulness, case.ragas_faithfulness)
+        for case in cases
+        if case.judge_faithfulness is not None and case.ragas_faithfulness is not None
+    ]
+
     return GenerationEvalReport(
         case_count=len(cases),
         answered_count=len(answered),
@@ -228,6 +323,39 @@ def aggregate_eval(cases: list[GenerationEvalCase]) -> GenerationEvalReport:
         else None,
         judge_lexical_faithfulness_gap=gap,
         judge_lexical_correlation=correlation,
+        ragas_scored_count=len(ragas_scored),
+        ragas_mean_faithfulness=_mean_or_none(
+            [case.ragas_faithfulness for case in ragas_scored if case.ragas_faithfulness is not None]
+        ),
+        ragas_mean_answer_relevancy=_mean_or_none(
+            [
+                case.ragas_answer_relevancy
+                for case in ragas_scored
+                if case.ragas_answer_relevancy is not None
+            ]
+        ),
+        ragas_mean_context_precision=_mean_or_none(
+            [
+                case.ragas_context_precision
+                for case in ragas_scored
+                if case.ragas_context_precision is not None
+            ]
+        ),
+        ragas_mean_context_recall=_mean_or_none(
+            [
+                case.ragas_context_recall
+                for case in ragas_scored
+                if case.ragas_context_recall is not None
+            ]
+        ),
+        ragas_lexical_faithfulness_gap=_mean_or_none(
+            [abs(lexical - ragas) for lexical, ragas in ragas_lexical_pairs]
+        ),
+        ragas_lexical_correlation=_pearson(ragas_lexical_pairs),
+        ragas_judge_faithfulness_gap=_mean_or_none(
+            [abs(judge - ragas) for judge, ragas in ragas_judge_pairs]
+        ),
+        ragas_judge_correlation=_pearson(ragas_judge_pairs),
     )
 
 

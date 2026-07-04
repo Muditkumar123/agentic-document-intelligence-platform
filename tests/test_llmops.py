@@ -798,3 +798,130 @@ def test_tracked_generation_eval_command(tmp_path):
     assert metrics["gen_eval_mean_faithfulness"] >= 0.0
     assert report["report"]["case_count"] == 1
     assert len(list(run_dir.glob("*/run.json"))) == 1
+
+
+def test_build_ragas_row_converts_case_shape():
+    from adip.llmops.ragas_eval import build_ragas_row
+
+    row = build_ragas_row(
+        "What is the fine?",
+        "The fine is 4 percent (c1).",
+        [{"citation": "c1", "text": "The fine is 4 percent of turnover."}],
+        ["4 percent of turnover"],
+    )
+    assert row == {
+        "user_input": "What is the fine?",
+        "response": "The fine is 4 percent (c1).",
+        "retrieved_contexts": ["The fine is 4 percent of turnover."],
+        "reference": "4 percent of turnover",
+    }
+
+
+def test_ragas_evaluator_requires_the_extra():
+    import importlib.util
+
+    import pytest
+
+    from adip.llmops.ragas_eval import RagasEvaluator
+
+    required = ("ragas", "langchain_openai", "langchain_huggingface")
+    if all(importlib.util.find_spec(module) is not None for module in required):
+        pytest.skip("ragas extra installed; lazy-import guard not exercisable")
+    with pytest.raises(ImportError, match=r"pip install -e \"\.\[ragas\]\""):
+        RagasEvaluator(model_name="any-model")
+
+
+def test_attach_ragas_scores_batches_and_skips_none_rows():
+    from adip.llmops.generation_eval import attach_ragas_scores
+    from adip.llmops.ragas_eval import RagasScores
+
+    answered = score_answer(
+        "What does it achieve?",
+        "neural distinguisher achieves accuracy (c1).",
+        [{"citation": "c1", "text": "neural distinguisher achieves accuracy"}],
+    )
+    refused = score_answer("Unknown?", "I do not have sufficient evidence to answer.", [])
+    seen_batches = []
+
+    def fake_scorer(rows):
+        seen_batches.append(rows)
+        return [RagasScores(faithfulness=0.9, answer_relevancy=0.8, context_precision=1.0, context_recall=0.7)]
+
+    updated = attach_ragas_scores(
+        [answered, refused],
+        [{"user_input": "q", "response": "a", "retrieved_contexts": [], "reference": ""}, None],
+        fake_scorer,
+    )
+
+    assert len(seen_batches) == 1 and len(seen_batches[0]) == 1  # one batch, refusal excluded
+    assert updated[0].ragas_faithfulness == 0.9
+    assert updated[0].ragas_context_recall == 0.7
+    assert updated[1].ragas_faithfulness is None
+
+
+def test_attach_ragas_scores_leaves_case_untouched_on_scorer_failure():
+    from adip.llmops.generation_eval import attach_ragas_scores
+
+    case = score_answer("q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}])
+    updated = attach_ragas_scores([case], [{"user_input": "q"}], lambda rows: [None])
+    assert updated[0].ragas_faithfulness is None
+    assert updated[0] == case
+
+
+def test_aggregate_eval_reports_ragas_metrics_and_three_way_agreement():
+    from adip.llmops.generation_eval import with_ragas
+    from adip.llmops.ragas_eval import RagasScores
+
+    grounded = score_answer(
+        "What does it achieve?",
+        "neural distinguisher achieves accuracy (c1).",
+        [{"citation": "c1", "text": "neural distinguisher achieves accuracy"}],
+    )
+    partial = score_answer(
+        "What is reported?",
+        "reported result plus a fabricated benchmark claim (c1).",
+        [{"citation": "c1", "text": "reported result"}],
+    )
+    grounded = with_judge(grounded, JudgeVerdict(0.9, 1.0, [], raw_text="{}"))
+    partial = with_judge(partial, JudgeVerdict(0.3, 0.8, [], raw_text="{}"))
+    grounded = with_ragas(
+        grounded,
+        RagasScores(faithfulness=1.0, answer_relevancy=0.9, context_precision=1.0, context_recall=0.8),
+    )
+    partial = with_ragas(
+        partial,
+        RagasScores(faithfulness=0.4, answer_relevancy=0.5, context_precision=0.5, context_recall=0.6),
+    )
+
+    report = aggregate_eval([grounded, partial])
+
+    assert report.ragas_scored_count == 2
+    assert report.ragas_mean_faithfulness == 0.7
+    assert report.ragas_mean_answer_relevancy == 0.7
+    assert report.ragas_mean_context_precision == 0.75
+    assert report.ragas_mean_context_recall == 0.7
+    assert report.ragas_lexical_faithfulness_gap is not None
+    assert report.ragas_judge_faithfulness_gap is not None
+    assert report.ragas_judge_correlation is not None
+    metrics = report.metrics()
+    assert metrics["gen_eval_ragas_scored_count"] == 2.0
+    assert metrics["gen_eval_ragas_mean_context_precision"] == 0.75
+
+
+def test_aggregate_eval_omits_ragas_metrics_when_ragas_did_not_run():
+    case = score_answer("q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}])
+    report = aggregate_eval([case])
+    assert report.ragas_scored_count == 0
+    assert report.ragas_mean_faithfulness is None
+    assert not any(key.startswith("gen_eval_ragas") for key in report.metrics())
+
+
+def test_with_ragas_handles_partial_metric_failures():
+    from adip.llmops.generation_eval import with_ragas
+    from adip.llmops.ragas_eval import RagasScores
+
+    case = score_answer("q", "grounded text (c1).", [{"citation": "c1", "text": "grounded text"}])
+    updated = with_ragas(case, RagasScores(faithfulness=None, answer_relevancy=0.6))
+    assert updated.ragas_faithfulness is None
+    assert updated.ragas_answer_relevancy == 0.6
+    assert with_ragas(case, None) is case
