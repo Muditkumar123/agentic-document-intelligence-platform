@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
+from adip.agents.graph import langgraph_available, run_agent_graph
 from adip.agents.models import AgentResult, AgentState, TraceEvent, utc_now_iso
 from adip.agents.nodes import (
     check_citations,
@@ -29,6 +30,17 @@ DEFAULT_NODES: tuple[tuple[str, AgentNode], ...] = (
     ("writer", write_response),
     ("citation_checker", check_citations),
 )
+
+SUPPORTED_ENGINES = {"auto", "langgraph", "sequential"}
+
+
+def resolve_engine(engine: str) -> str:
+    """Pick the execution engine: LangGraph when installed, sequential otherwise."""
+    if engine not in SUPPORTED_ENGINES:
+        raise ValueError(f"Unsupported agent engine: {engine}")
+    if engine == "auto":
+        return "langgraph" if langgraph_available() else "sequential"
+    return engine
 
 
 def run_agent_from_index_path(
@@ -59,6 +71,7 @@ def run_agent_from_index_path(
     reasoning_max_new_tokens: int = 256,
     use_reasoning_planner: bool = False,
     trace_dir: Path | None = None,
+    engine: str = "auto",
 ) -> AgentResult:
     index = load_index(index_path)
     return run_agent(
@@ -90,6 +103,7 @@ def run_agent_from_index_path(
         use_reasoning_planner=use_reasoning_planner,
         trace_dir=trace_dir,
         index_path=str(index_path),
+        engine=engine,
     )
 
 
@@ -123,9 +137,11 @@ def run_agent(
     trace_dir: Path | None = None,
     index_path: str | None = None,
     nodes: tuple[tuple[str, AgentNode], ...] = DEFAULT_NODES,
+    engine: str = "auto",
 ) -> AgentResult:
     if top_k <= 0:
         raise ValueError("top_k must be greater than 0")
+    resolved_engine = resolve_engine(engine)
 
     state = AgentState(
         run_id=f"agent_{uuid.uuid4().hex[:12]}",
@@ -169,14 +185,18 @@ def run_agent(
             "reasoning_model_profile": reasoning_model_profile,
             "reasoning_device": reasoning_device or device,
             "use_reasoning_planner": use_reasoning_planner,
+            "workflow_engine": resolved_engine,
         },
     )
 
     workflow_started = time.perf_counter()
-    for node_name, node in nodes:
-        state = _run_node(node_name, node, state, index)
-        if state.status == "failed":
-            break
+    if resolved_engine == "langgraph":
+        state = run_agent_graph(state, index, nodes, _run_node)
+    else:
+        for node_name, node in nodes:
+            state = _run_node(node_name, node, state, index)
+            if state.status == "failed":
+                break
 
     state.metrics["workflow_duration_ms"] = (time.perf_counter() - workflow_started) * 1000
     trace_path = write_trace(state, trace_dir) if trace_dir else None

@@ -153,7 +153,7 @@ Citation Checker
 Final Response
 ```
 
-Current implementation uses a dependency-light Python runner with explicit nodes and JSON trace output. This creates the AgentOps foundation now and leaves a clean migration path to LangGraph later.
+The workflow runs on two interchangeable engines behind one definition: a real **LangGraph `StateGraph`** (default when the `[agents]` extra is installed) where the break-on-failure behavior is expressed as conditional edges routing to `END`, and a dependency-light sequential runner as fallback for minimal installs. Both engines share the same node functions, the same `AgentState`, and the same tracing wrapper, so AgentOps traces are identical and every trace records which engine produced it (`workflow_engine`).
 
 ### Agent State
 
@@ -450,7 +450,7 @@ Current implementation starts with a local TF-IDF vector baseline using `scikit-
 - Citation checker.
 - AgentOps trace persistence.
 
-Current implementation completes these as an extractive baseline. LLM synthesis and LangGraph orchestration are planned upgrades.
+Current implementation completes these as an extractive baseline running on LangGraph orchestration (with a sequential fallback). LLM synthesis as the default writer is the planned upgrade.
 
 ### Milestone 4: MLOps Foundation
 
