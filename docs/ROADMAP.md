@@ -31,8 +31,9 @@ Goal: answer questions with cited context.
 - Add embedding model wrapper. Status: done for TF-IDF and dependency-light dense LSA; optional sentence-transformers adapter added.
 - Create local vector index. Status: done for TF-IDF, dense NumPy search, and optional FAISS persistence.
 - Implement top-k search. Status: done.
+- Add hybrid retrieval. Status: done — `hybrid` backend fuses BM25 (Okapi, scikit-learn based, no extra dependencies) with dense rankings via weighted reciprocal-rank fusion, wired through the CLIs, API, and retrieval benchmark.
 - Add cited answer generation. Status: done as an extractive non-LLM baseline.
-- Add a small golden Q&A evaluation set. Status: done.
+- Add a small golden Q&A evaluation set. Status: done; later replaced by the real public-document corpus in `data/eval/` (45 answerable + 10 unanswerable questions).
 
 Deliverable:
 
@@ -41,7 +42,7 @@ Deliverable:
 Next upgrade:
 
 - Install `sentence-transformers` and `faiss-cpu` for production semantic retrieval.
-- Add reranking after top-k retrieval.
+- Add reranking after top-k retrieval. Status: done — lexical and cross-encoder rerankers, with the first-stage candidate pool automatically widened to 3x top_k (min 10) whenever a reranker is enabled.
 - Add LLM-generated synthesis after retrieval.
 
 ## Phase 3: Agentic Workflow
