@@ -249,6 +249,8 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_e
 
 An optional **LLM-as-judge** pass (`--judge-model-name ... --judge-endpoint-url ... --judge-api-key ...`) scores the same answers semantically and reports lexical-vs-judge agreement (mean gap + Pearson correlation), quantifying how far the cheap CI-safe proxy can be trusted. See [docs/LLMOPS.md](docs/LLMOPS.md#llm-as-judge-optional-second-opinion).
 
+An optional **RAGAS** pass (`pip install -e ".[ragas]"`, then `--ragas-model-name ... --ragas-endpoint-url ...`) adds the industry-standard metrics — faithfulness, answer relevancy, context precision, context recall — behind the same report shape, including three-way faithfulness agreement (RAGAS vs lexical proxy vs judge). The context metrics give graded retrieval evaluation where hit@k/MRR are saturated. See [docs/LLMOPS.md](docs/LLMOPS.md#standardized-ragas-metrics-optional).
+
 The latest report is surfaced as the dashboard's **Answer Quality** tiles and `GET /monitoring/generation-eval`. The CI quality gate runs this over a **corpus of real public documents** (`data/eval/` — GDPR/EU AI Act, IETF RFCs, NIST, SEC, arXiv, 18 docs across 5 categories, 45 golden questions) so the numbers are not overfit to project-authored text. On that corpus the extractive baseline scores about **0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage** (retrieval is saturated at 1.0 because the domains are lexically distinct, so faithfulness is the discriminating metric). See [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md).
 
 ## Continuous Integration
