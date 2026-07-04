@@ -56,11 +56,13 @@ class RebuildIndexRequest(BaseModel):
     index_path: Path = Path("data/processed/vector_index")
     chunk_size: int = Field(default=800, ge=1)
     chunk_overlap: int = Field(default=120, ge=0)
-    backend: Literal["tfidf", "dense", "dense_lsa", "sentence_transformers"] = "tfidf"
+    backend: Literal["tfidf", "dense", "dense_lsa", "sentence_transformers", "hybrid"] = "tfidf"
     ngram_max: int = Field(default=2, ge=1)
     embedding_model: str = "lsa"
     dense_dimensions: int = Field(default=128, ge=1)
     use_faiss: bool = True
+    rrf_k: int = Field(default=60, ge=1)
+    hybrid_dense_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class ModelCheckRequest(BaseModel):

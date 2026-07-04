@@ -124,7 +124,7 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.rag.evaluate \
   --top-k 3
 ```
 
-The project includes both a local `scikit-learn` TF-IDF vector baseline and dense retrieval. Dense retrieval defaults to dependency-light LSA embeddings and can use `sentence-transformers` plus FAISS when those optional dependencies are installed.
+The project includes a local `scikit-learn` TF-IDF vector baseline, dense retrieval, and a `hybrid` backend that fuses BM25 with dense rankings via weighted reciprocal-rank fusion (`--backend hybrid`, tunable with `--rrf-k` and `--hybrid-dense-weight`). Dense retrieval defaults to dependency-light LSA embeddings and can use `sentence-transformers` plus FAISS when those optional dependencies are installed. When a reranker is enabled, the first-stage candidate pool automatically widens to 3x `top_k` (at least 10) unless `--candidate-k` is set explicitly.
 
 Compare retrieval backends:
 
@@ -132,7 +132,7 @@ Compare retrieval backends:
 conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_retrieval_benchmark \
   --chunks data/processed/chunks.jsonl \
   --golden data/reference/golden_qa.jsonl \
-  --backends tfidf dense \
+  --backends tfidf dense hybrid \
   --rerankers none lexical cross_encoder \
   --candidate-k 10 \
   --cross-encoder-model cross-encoder/ms-marco-MiniLM-L-6-v2 \

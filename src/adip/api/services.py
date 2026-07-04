@@ -25,7 +25,7 @@ from adip.llmops.models import GenerationRequest, OpenAICompatibleChatAdapter
 from adip.llmops.pipeline import build_evidence
 from adip.rag.answer import build_extractive_answer
 from adip.rag.chunks import read_chunks_jsonl
-from adip.rag.rerank import rerank_results
+from adip.rag.rerank import rerank_results, resolve_candidate_k
 from adip.rag.retriever import build_index, load_index, summarize_index_documents
 
 SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md"}
@@ -274,9 +274,7 @@ def get_mlops_run(
 def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
     started = time.perf_counter()
     index = load_index(request.index_path)
-    candidate_k = request.candidate_k or request.top_k
-    if candidate_k < request.top_k:
-        raise ValueError("candidate_k must be greater than or equal to top_k")
+    candidate_k = resolve_candidate_k(request.top_k, request.candidate_k, request.reranker)
 
     candidates = index.search(
         request.question,
@@ -417,6 +415,8 @@ def rebuild_index(request: RebuildIndexRequest) -> dict[str, Any]:
         embedding_model=request.embedding_model,
         dense_dimensions=request.dense_dimensions,
         use_faiss=request.use_faiss,
+        rrf_k=request.rrf_k,
+        hybrid_dense_weight=request.hybrid_dense_weight,
     )
     index.save(request.index_path)
     latency_ms = (time.perf_counter() - started) * 1000
