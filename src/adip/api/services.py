@@ -338,6 +338,7 @@ def run_agent_workflow(request: AgentRunRequest) -> dict[str, Any]:
         reasoning_max_new_tokens=request.reasoning_max_new_tokens,
         use_reasoning_planner=request.use_reasoning_planner,
         trace_dir=request.trace_dir,
+        engine=request.engine,
     )
     payload = result.to_dict()
     payload["latency_ms"] = (time.perf_counter() - started) * 1000

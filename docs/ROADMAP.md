@@ -63,7 +63,7 @@ Deliverable:
 
 Next upgrade:
 
-- Replace the dependency-light runner with LangGraph once dependencies are added.
+- Replace the dependency-light runner with LangGraph. Status: done — the workflow compiles to a real LangGraph `StateGraph` (`[agents]` extra) with conditional failure edges; the sequential runner remains as the fallback engine for minimal installs, and both produce identical AgentOps traces.
 - Add LLM-based synthesis behind the writer node.
 - Add human review gates for high-risk outputs.
 

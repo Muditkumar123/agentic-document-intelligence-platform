@@ -84,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not persist an AgentOps trace JSON file.",
     )
+    parser.add_argument(
+        "--engine",
+        choices=["auto", "langgraph", "sequential"],
+        default="auto",
+        help="Workflow engine. `auto` uses LangGraph when installed, else the sequential runner.",
+    )
     parser.add_argument("--json", action="store_true", help="Print full JSON output.")
     return parser
 
@@ -117,6 +123,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         reasoning_max_new_tokens=args.reasoning_max_new_tokens,
         use_reasoning_planner=args.use_reasoning_planner,
         trace_dir=trace_dir,
+        engine=args.engine,
     )
 
     payload = result.to_dict()

@@ -233,3 +233,86 @@ def test_agent_continues_when_optional_reasoning_planner_fails(monkeypatch):
     assert "retrieves evidence" in result.state.final_answer
     assert result.state.metrics["planning_llm_error"] == "HTTP Error 402: Payment Required"
     assert any("Reasoning planner skipped" in note for note in result.state.planning_notes)
+
+
+def test_resolve_engine_prefers_langgraph_and_falls_back(monkeypatch):
+    import pytest
+
+    import adip.agents.runner as runner_module
+    from adip.agents.runner import resolve_engine
+
+    monkeypatch.setattr(runner_module, "langgraph_available", lambda: True)
+    assert resolve_engine("auto") == "langgraph"
+    monkeypatch.setattr(runner_module, "langgraph_available", lambda: False)
+    assert resolve_engine("auto") == "sequential"
+    assert resolve_engine("sequential") == "sequential"
+    with pytest.raises(ValueError):
+        resolve_engine("mystery")
+
+
+def test_langgraph_engine_matches_sequential_run():
+    import pytest
+
+    from adip.agents.graph import langgraph_available
+
+    if not langgraph_available():
+        pytest.skip("langgraph not installed; parity test needs the [agents] extra")
+
+    index = build_index(
+        [
+            make_chunk("chunk_platform", "The platform ingests documents and writes JSONL chunks."),
+            make_chunk("chunk_ops", "AgentOps records node traces and tool calls."),
+        ]
+    )
+    kwargs = dict(
+        question="What does the platform ingest?",
+        index=index,
+        task="qa",
+        top_k=2,
+        model_profile="extractive_baseline",
+    )
+
+    sequential = run_agent(engine="sequential", **kwargs)
+    graphed = run_agent(engine="langgraph", **kwargs)
+
+    assert graphed.state.status == "completed"
+    assert graphed.state.final_answer == sequential.state.final_answer
+    assert [e.node_name for e in graphed.state.trace] == [e.node_name for e in sequential.state.trace]
+    assert graphed.state.citations == sequential.state.citations
+    assert graphed.state.metrics["workflow_engine"] == "langgraph"
+    assert sequential.state.metrics["workflow_engine"] == "sequential"
+
+
+def test_langgraph_conditional_edge_stops_on_node_failure(monkeypatch):
+    import pytest
+
+    import adip.agents.runner as runner_module
+    from adip.agents.graph import langgraph_available
+
+    if not langgraph_available():
+        pytest.skip("langgraph not installed; failure-edge test needs the [agents] extra")
+
+    def broken_retriever(state, index):
+        raise RuntimeError("retrieval exploded")
+
+    nodes = tuple(
+        (name, broken_retriever if name == "retriever" else fn)
+        for name, fn in runner_module.DEFAULT_NODES
+    )
+    index = build_index([make_chunk("chunk_a", "Some indexed content.")])
+
+    result = run_agent(
+        question="What is indexed?",
+        index=index,
+        task="qa",
+        top_k=1,
+        model_profile="extractive_baseline",
+        nodes=nodes,
+        engine="langgraph",
+    )
+
+    assert result.state.status == "failed"
+    assert [e.node_name for e in result.state.trace] == ["intent_router", "planner", "retriever"]
+    assert result.state.trace[-1].status == "failed"
+    assert "retrieval exploded" in (result.state.trace[-1].error or "")
+    assert result.state.final_answer == ""

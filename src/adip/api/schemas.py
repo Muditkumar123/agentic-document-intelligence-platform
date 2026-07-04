@@ -48,6 +48,7 @@ class AgentRunRequest(BaseModel):
     reasoning_max_new_tokens: int = Field(default=256, ge=1)
     use_reasoning_planner: bool = False
     trace_dir: Path | None = Path("data/monitoring/agent_traces")
+    engine: Literal["auto", "langgraph", "sequential"] = "auto"
 
 
 class RebuildIndexRequest(BaseModel):

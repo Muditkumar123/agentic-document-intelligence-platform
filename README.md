@@ -35,7 +35,7 @@ Initial target domains:
 
 ## Intended Resume Story
 
-Built an agentic document intelligence platform using RAG, open-source LLMs, LangGraph-style agent orchestration, FastAPI, vector search, MLflow, DVC, Docker, and drift monitoring. Implemented document ingestion, semantic retrieval, multi-step reasoning agents, cited report generation, LoRA/QLoRA fine-tuning, model evaluation, and reproducible MLOps pipelines.
+Built an agentic document intelligence platform using RAG, open-source LLMs, LangGraph agent orchestration, FastAPI, vector search, MLflow, DVC, Docker, and drift monitoring. Implemented document ingestion, semantic retrieval, multi-step reasoning agents, cited report generation, LoRA/QLoRA fine-tuning, model evaluation, and reproducible MLOps pipelines.
 
 ## Ops Pipelines
 
@@ -384,7 +384,7 @@ Recommended dashboard setup for readable local LLM answers:
 ## Planned Stack
 
 - Backend: Python, FastAPI
-- Agent orchestration: LangGraph-style graph workflow
+- Agent orchestration: LangGraph `StateGraph` (`[agents]` extra; conditional failure edges, sequential fallback for minimal installs)
 - NLP/LLM: Hugging Face Transformers, Sentence Transformers, PEFT
 - RAG storage: FAISS or Chroma
 - Baseline retrieval: scikit-learn TF-IDF local vector index

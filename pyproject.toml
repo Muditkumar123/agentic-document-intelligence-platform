@@ -32,6 +32,9 @@ retrieval = [
   "torch",
   "transformers>=4.51.0",
 ]
+agents = [
+  "langgraph>=0.2",
+]
 ragas = [
   "ragas>=0.4,<0.5",
   "langchain-core>=0.3,<0.4",
