@@ -32,9 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--backend",
-        choices=["tfidf", "dense", "dense_lsa", "sentence_transformers"],
+        choices=["tfidf", "dense", "dense_lsa", "sentence_transformers", "hybrid"],
         default="tfidf",
-        help="Embedding/index backend.",
+        help="Embedding/index backend. `hybrid` fuses BM25 and dense rankings with RRF.",
     )
     parser.add_argument(
         "--ngram-max",
@@ -58,6 +58,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable FAISS even when it is installed.",
     )
+    parser.add_argument(
+        "--rrf-k",
+        type=int,
+        default=60,
+        help="Reciprocal-rank-fusion constant for the hybrid backend.",
+    )
+    parser.add_argument(
+        "--hybrid-dense-weight",
+        type=float,
+        default=0.5,
+        help="Dense-ranking weight (0..1) for the hybrid backend; BM25 gets the rest.",
+    )
     return parser
 
 
@@ -71,6 +83,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         embedding_model=args.embedding_model,
         dense_dimensions=args.dense_dimensions,
         use_faiss=not args.no_faiss,
+        rrf_k=args.rrf_k,
+        hybrid_dense_weight=args.hybrid_dense_weight,
     )
     index.save(args.index)
     print(

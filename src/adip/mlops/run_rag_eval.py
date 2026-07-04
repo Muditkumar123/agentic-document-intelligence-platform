@@ -22,11 +22,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chunks", type=Path, default=Path("data/processed/chunks.jsonl"))
     parser.add_argument("--index", type=Path, default=Path("data/processed/vector_index"))
     parser.add_argument("--golden", type=Path, default=Path("data/reference/golden_qa.jsonl"))
-    parser.add_argument("--backend", choices=["tfidf", "dense", "dense_lsa", "sentence_transformers"], default="tfidf")
+    parser.add_argument(
+        "--backend",
+        choices=["tfidf", "dense", "dense_lsa", "sentence_transformers", "hybrid"],
+        default="tfidf",
+    )
     parser.add_argument("--ngram-max", type=int, default=2)
     parser.add_argument("--embedding-model", default="lsa")
     parser.add_argument("--dense-dimensions", type=int, default=128)
     parser.add_argument("--no-faiss", action="store_true")
+    parser.add_argument("--rrf-k", type=int, default=60)
+    parser.add_argument("--hybrid-dense-weight", type=float, default=0.5)
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--candidate-k", type=int, default=None)
     parser.add_argument("--reranker", choices=["none", "lexical", "cross_encoder"], default="none")
@@ -61,6 +67,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "embedding_model": args.embedding_model,
                 "dense_dimensions": args.dense_dimensions,
                 "faiss_requested": not args.no_faiss,
+                "rrf_k": args.rrf_k,
+                "hybrid_dense_weight": args.hybrid_dense_weight,
                 "top_k": args.top_k,
                 "candidate_k": args.candidate_k or args.top_k,
                 "reranker": args.reranker,
@@ -79,6 +87,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             embedding_model=args.embedding_model,
             dense_dimensions=args.dense_dimensions,
             use_faiss=not args.no_faiss,
+            rrf_k=args.rrf_k,
+            hybrid_dense_weight=args.hybrid_dense_weight,
         )
         index.save(args.index)
         report = evaluate(

@@ -27,8 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--backends",
         nargs="+",
-        choices=["tfidf", "dense", "dense_lsa", "sentence_transformers"],
-        default=["tfidf", "dense"],
+        choices=["tfidf", "dense", "dense_lsa", "sentence_transformers", "hybrid"],
+        default=["tfidf", "dense", "hybrid"],
     )
     parser.add_argument("--ngram-max", type=int, default=2)
     parser.add_argument("--embedding-model", default="lsa")

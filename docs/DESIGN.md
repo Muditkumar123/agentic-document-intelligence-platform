@@ -118,8 +118,8 @@ The base pipeline is generic. Domain presets customize extraction fields, prompt
 3. Text is cleaned and split into chunks.
 4. Chunks are embedded and stored in a vector index.
 5. User asks a question or requests a report.
-6. Retriever selects relevant chunks.
-7. Optional reranker improves the evidence set.
+6. Retriever selects relevant chunks. Backends: TF-IDF (deterministic baseline), dense (LSA or sentence-transformers), and hybrid — BM25 and dense rankings fused with weighted reciprocal-rank fusion (rank-based, so no score-scale calibration is needed; fused scores are normalized so rank-1-in-both equals 1.0).
+7. Optional reranker improves the evidence set. When a reranker is on, the first-stage candidate pool automatically widens to 3x top_k (min 10) so reranking can promote chunks the final cut would have missed, not just reorder it.
 8. Agent graph plans the task, calls tools, drafts an answer, and verifies citations.
 9. Evaluation layer records metrics and failure cases.
 10. Output is returned with citations, confidence notes, and trace metadata.

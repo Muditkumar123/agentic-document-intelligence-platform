@@ -44,7 +44,7 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_retrieval_be
   --chunks data/processed/chunks.jsonl \
   --index-root data/processed/retrieval_benchmark \
   --golden data/reference/golden_qa.jsonl \
-  --backends tfidf dense \
+  --backends tfidf dense hybrid \
   --rerankers none lexical cross_encoder \
   --embedding-model lsa \
   --candidate-k 10 \
@@ -54,9 +54,11 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_retrieval_be
   --top-k 3
 ```
 
-This builds and evaluates multiple retrievers on the same golden questions, then logs metrics such as `tfidf_mrr`, `dense_lsa_mrr`, `tfidf_lexical_rerank_mrr`, `dense_lsa_lexical_rerank_mrr`, `tfidf_cross_encoder_rerank_mrr`, reranker deltas, query latency, index size, and whether FAISS was used.
+This builds and evaluates multiple retrievers on the same golden questions, then logs metrics such as `tfidf_mrr`, `dense_lsa_mrr`, `hybrid_mrr`, `tfidf_lexical_rerank_mrr`, `hybrid_cross_encoder_rerank_mrr`, reranker deltas, query latency, index size, and whether FAISS was used.
 
-Latest local benchmark result: `dense_lsa` is the best plain backend by MRR, while `tfidf_cross_encoder_rerank` is the best overall variant by MRR. Plain TF-IDF reached about 0.733 MRR, Dense LSA reached about 0.756 MRR, and both cross-encoder reranked variants reached about 0.900 MRR on the current 15-question golden set.
+The `hybrid` backend fuses BM25 (Okapi, scikit-learn based, no extra dependencies) with dense retrieval using weighted reciprocal-rank fusion; see the design notes in [DESIGN.md](DESIGN.md) and the CLI flags `--rrf-k` / `--hybrid-dense-weight`.
+
+Latest benchmark on the real public-document corpus (`data/eval/`, 45 questions, top-k 5): retrieval is saturated for every variant — hit rate 1.0 across the board, MRR 1.0 for `tfidf` and the cross-encoder reranked variants, and 0.978 for `dense_lsa`, `hybrid`, and the lexical-reranked variants (two GDPR questions land at rank 2 instead of 1). On this lexically-distinct corpus hybrid matches TF-IDF within noise; its value is robustness on paraphrased queries and corpora where exact term overlap breaks down, which the saturated golden set cannot measure. (The earlier 15-question self-authored set told a different story: TF-IDF 0.733 MRR, Dense LSA 0.756, cross-encoder reranked variants 0.900.)
 
 Agent smoke test:
 

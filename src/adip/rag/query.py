@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from adip.rag.answer import build_extractive_answer
-from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results
+from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
 from adip.rag.retriever import load_index
 
 
@@ -59,9 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     index = load_index(args.index)
-    candidate_k = args.candidate_k or args.top_k
-    if candidate_k < args.top_k:
-        raise ValueError("candidate_k must be greater than or equal to top_k")
+    candidate_k = resolve_candidate_k(args.top_k, args.candidate_k, args.reranker)
     candidates = index.search(args.question, top_k=candidate_k)
     retrieved = rerank_results(
         args.question,

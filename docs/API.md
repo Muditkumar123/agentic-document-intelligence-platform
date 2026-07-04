@@ -147,6 +147,8 @@ curl -X POST http://127.0.0.1:8010/pipeline/rebuild-index \
 
 This endpoint runs ingestion and index building in one call. It is useful for demos and local iteration; production deployments should usually run this as a tracked MLOps job.
 
+`backend` accepts `tfidf`, `dense`, `dense_lsa`, `sentence_transformers`, or `hybrid`. The hybrid backend fuses BM25 and dense rankings with weighted reciprocal-rank fusion and honors two optional fields: `rrf_k` (default 60) and `hybrid_dense_weight` (0–1, default 0.5; BM25 gets the remainder).
+
 ## Monitoring Summary
 
 ```bash

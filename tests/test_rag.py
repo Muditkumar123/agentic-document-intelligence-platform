@@ -1,10 +1,14 @@
 import json
 
+import numpy as np
+import pytest
+
 import adip.rag.rerank as rerank_module
+from adip.rag.bm25 import build_bm25_index
 from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.evaluate import aggregate_by_category, evaluate, read_golden
-from adip.rag.rerank import rerank_results
-from adip.rag.retriever import build_index, load_index
+from adip.rag.rerank import rerank_results, resolve_candidate_k
+from adip.rag.retriever import build_index, load_index, reciprocal_rank_fusion
 
 
 def make_chunk(chunk_id, text):
@@ -368,3 +372,105 @@ def test_evaluate_with_reranker_reports_reranker_metadata(tmp_path):
     assert report["reranker"] == "lexical"
     assert report["candidate_k"] == 2
     assert report["hit_rate_at_k"] == 1.0
+
+
+def test_bm25_prefers_document_with_rare_query_term():
+    texts = [
+        "the platform stores documents and answers questions about documents",
+        "quarterly financial statements disclose revenue and liabilities",
+        "the platform stores documents",
+    ]
+    bm25 = build_bm25_index(texts)
+    scores = bm25.scores("what were the revenue liabilities?")
+
+    assert scores[1] > scores[0]
+    assert scores[1] > scores[2]
+    assert scores[0] == 0.0
+
+
+def test_bm25_all_stopword_query_scores_zero():
+    bm25 = build_bm25_index(["alpha beta gamma", "delta epsilon"])
+    assert bm25.scores("the of and").sum() == 0.0
+
+
+def test_reciprocal_rank_fusion_top_of_both_lists_scores_one():
+    fused = reciprocal_rank_fusion(
+        score_lists=[np.array([5.0, 1.0]), np.array([7.0, 2.0])],
+        weights=[0.5, 0.5],
+        candidate_indices=[0, 1],
+    )
+    assert fused[0] == pytest.approx(1.0)
+    assert fused[1] < fused[0]
+
+
+def test_reciprocal_rank_fusion_ignores_nonpositive_component_scores():
+    fused = reciprocal_rank_fusion(
+        score_lists=[np.array([0.0, 2.0]), np.array([0.0, 1.0])],
+        weights=[0.5, 0.5],
+        candidate_indices=[0, 1],
+    )
+    assert fused[0] == 0.0
+    assert fused[1] == pytest.approx(1.0)
+
+
+def test_reciprocal_rank_fusion_respects_component_weights():
+    scores_a = np.array([3.0, 2.0, 1.0])
+    scores_b = np.array([1.0, 3.0, 2.0])
+    lexical_only = reciprocal_rank_fusion(
+        score_lists=[scores_a, scores_b],
+        weights=[1.0, 0.0],
+        candidate_indices=[0, 1, 2],
+    )
+    dense_only = reciprocal_rank_fusion(
+        score_lists=[scores_a, scores_b],
+        weights=[0.0, 1.0],
+        candidate_indices=[0, 1, 2],
+    )
+    assert max(lexical_only, key=lexical_only.get) == 0
+    assert max(dense_only, key=dense_only.get) == 1
+
+
+def test_build_save_load_and_search_hybrid_index(tmp_path):
+    chunks = [
+        make_chunk("chunk_rag", "Retrieval augmented generation searches relevant document chunks."),
+        make_chunk("chunk_ops", "MLflow and DVC track experiments and datasets."),
+        make_chunk("chunk_deploy", "Docker images ship the API to production servers."),
+    ]
+
+    index = build_index(chunks, backend="hybrid")
+    index_path = tmp_path / "hybrid_index"
+    index.save(index_path)
+
+    loaded = load_index(index_path)
+    results = loaded.search("How does retrieval find document chunks?", top_k=2)
+
+    assert loaded.backend == "hybrid"
+    assert loaded.metadata["fusion"] == "weighted_rrf"
+    assert results[0].chunk["chunk_id"] == "chunk_rag"
+    assert 0 < results[0].score <= 1.0
+
+
+def test_hybrid_index_respects_document_filter():
+    chunks = [
+        make_document_chunk("doc_a", "chunk_a", "alpha.md", 0, "Alpha discusses retrieval quality."),
+        make_document_chunk("doc_b", "chunk_b", "beta.md", 0, "Beta discusses retrieval quality."),
+    ]
+    index = build_index(chunks, backend="hybrid")
+
+    results = index.search("retrieval quality", top_k=2, document_filter="beta.md")
+
+    assert [item.chunk["chunk_id"] for item in results] == ["chunk_b"]
+
+
+def test_hybrid_index_validates_dense_weight():
+    with pytest.raises(ValueError):
+        build_index([make_chunk("chunk_a", "some text")], backend="hybrid", hybrid_dense_weight=1.5)
+
+
+def test_resolve_candidate_k_widens_pool_only_when_reranking():
+    assert resolve_candidate_k(3, None, "none") == 3
+    assert resolve_candidate_k(3, None, "lexical") == 10
+    assert resolve_candidate_k(5, None, "cross_encoder") == 15
+    assert resolve_candidate_k(3, 7, "lexical") == 7
+    with pytest.raises(ValueError):
+        resolve_candidate_k(5, 3, "lexical")
