@@ -21,6 +21,7 @@ class IngestionResult:
     chunk_count: int
     chunk_size: int
     chunk_overlap: int
+    parser: str = "default"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -31,6 +32,7 @@ def ingest_path(
     output_path: Path,
     chunk_size: int = 800,
     chunk_overlap: int = 120,
+    parser: str = "default",
 ) -> IngestionResult:
     """Parse supported documents and write chunks to JSONL."""
     documents = discover_documents(input_path)
@@ -39,7 +41,7 @@ def ingest_path(
 
     pages: list[Page] = []
     for document in documents:
-        pages.extend(parse_document(document))
+        pages.extend(parse_document(document, parser=parser))
 
     chunks = build_chunks(pages, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     write_chunks_jsonl(chunks, output_path)
@@ -52,6 +54,7 @@ def ingest_path(
         chunk_count=len(chunks),
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        parser=parser,
     )
 
 

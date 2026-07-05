@@ -53,3 +53,5 @@
 {"question": "Which specific cipher suite does TLS 1.3 mandate by default?", "expected_substrings": [], "category": "technical_unanswerable", "answerable": false}
 {"question": "What annual revenue did the company in the 10-K report?", "expected_substrings": [], "category": "finance_unanswerable", "answerable": false}
 {"question": "What is the time complexity of self-attention in the Transformer?", "expected_substrings": [], "category": "academic_unanswerable", "answerable": false}
+{"question": "Which class of HTTP status codes means the server failed to fulfill a valid request?", "category": "technical", "expected_substrings": ["server failed to fulfill an apparently valid request"]}
+{"question": "What does a 3xx redirection status code tell the client?", "category": "technical", "expected_substrings": ["Further action needs to be taken"]}
