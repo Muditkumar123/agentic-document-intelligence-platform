@@ -631,3 +631,56 @@ def test_agent_request_defaults_to_second_gpu():
     request = AgentRunRequest(question="Summarize this.")
 
     assert request.device == "cuda:1"
+
+
+def test_offline_eval_endpoint_serves_committed_snapshot():
+    client = TestClient(create_app())
+
+    response = client.get("/monitoring/offline-eval")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["available"] is True
+    assert payload["judge"]["judge_model"]
+    assert 0.0 <= payload["ragas"]["ragas_mean_faithfulness"] <= 1.0
+    assert payload["ragas"]["answer_relevancy_caveat"]
+
+
+def test_offline_eval_snapshot_gracefully_absent(tmp_path):
+    summary = api_services.offline_eval_snapshot(snapshot_path=tmp_path / "missing.json")
+
+    assert summary["available"] is False
+
+
+def test_offline_eval_snapshot_gracefully_malformed(tmp_path):
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+
+    summary = api_services.offline_eval_snapshot(snapshot_path=broken)
+
+    assert summary["available"] is False
+
+
+def test_generation_eval_summary_includes_full_metrics(tmp_path):
+    metrics_path = tmp_path / "metrics.json"
+    metrics_path.write_text(
+        '{"gen_eval_mean_faithfulness": 0.6, "gen_eval_refusal_recall": 0.5}', encoding="utf-8"
+    )
+
+    summary = api_services.generation_eval_summary(metrics_path=metrics_path)
+
+    assert summary["available"] is True
+    assert summary["metrics"]["gen_eval_refusal_recall"] == 0.5
+
+
+def test_dashboard_serves_new_ui_sections():
+    client = TestClient(create_app())
+
+    dashboard = client.get("/")
+
+    body = dashboard.text
+    assert "coldStartBanner" in body
+    assert "ragBackend" in body
+    assert "ragCompareBackends" in body
+    assert 'data-mode="eval"' in body
+    assert "compareView" in body

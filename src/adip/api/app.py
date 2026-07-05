@@ -22,6 +22,7 @@ from adip.api.services import (
     list_mlops_run_history,
     list_raw_documents,
     model_profiles_summary,
+    offline_eval_snapshot,
     rebuild_index,
     retrieval_benchmark_summary,
     run_agent_workflow,
@@ -67,6 +68,10 @@ def create_app():
     @app.get("/monitoring/generation-eval")
     def generation_eval() -> dict[str, Any]:
         return generation_eval_summary()
+
+    @app.get("/monitoring/offline-eval")
+    def offline_eval() -> dict[str, Any]:
+        return offline_eval_snapshot()
 
     @app.get("/model-profiles")
     def model_profiles() -> dict[str, Any]:

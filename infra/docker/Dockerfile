@@ -58,6 +58,10 @@ RUN chmod +x ./entrypoint.sh \
         --golden data/eval/golden_qa.jsonl --abstention-threshold 0.10 \
         --metrics-output data/monitoring/generation_eval_metrics.json \
         --report-output data/monitoring/generation_eval_report.json \
+    && python -m adip.rag.index --chunks data/processed/chunks.jsonl \
+        --index data/processed/vector_index_dense --backend dense --no-faiss \
+    && python -m adip.rag.index --chunks data/processed/chunks.jsonl \
+        --index data/processed/vector_index_hybrid --backend hybrid \
     && mkdir -p data/raw data/monitoring/agent_traces data/monitoring/mlops_runs \
     && useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app

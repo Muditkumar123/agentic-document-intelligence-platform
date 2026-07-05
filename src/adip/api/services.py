@@ -107,9 +107,27 @@ def generation_eval_summary(
         "refusal_rate": metrics.get("gen_eval_refusal_rate"),
         "model_profile": config.get("model_profile"),
         "task": config.get("task"),
+        "metrics": metrics,
         "metrics_path": str(metrics_path),
         "report_path": str(report_path),
     }
+
+
+def offline_eval_snapshot(
+    snapshot_path: Path = Path("data/reference/offline_eval_snapshot.json"),
+) -> dict[str, Any]:
+    """Committed results of offline evaluations (LLM judge, RAGAS) for the dashboard.
+
+    These evaluations call live models, so they cannot run inside the deterministic
+    container build; the latest offline run is committed as a dated snapshot instead.
+    """
+    if not snapshot_path.exists():
+        return {"available": False, "snapshot_path": str(snapshot_path)}
+    try:
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {"available": False, "snapshot_path": str(snapshot_path)}
+    return {"available": True, "snapshot_path": str(snapshot_path), **snapshot}
 
 
 def model_profiles_summary() -> dict[str, Any]:
