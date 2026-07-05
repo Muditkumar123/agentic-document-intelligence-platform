@@ -17,6 +17,7 @@ is a short excerpt used for evaluation, with its source and licensing/terms.
 | `rfc2119_keywords.md` | technical | https://www.rfc-editor.org/rfc/rfc2119.txt | IETF RFC 2119 (Bradner, 1997); reproducible per IETF Trust legal provisions |
 | `rfc8446_tls13.md` | technical | https://www.rfc-editor.org/rfc/rfc8446.txt | IETF RFC 8446 (Rescorla, 2018); reproducible per IETF Trust legal provisions |
 | `rfc9110_http_methods.md` | technical | https://www.rfc-editor.org/rfc/rfc9110.txt | IETF RFC 9110 (Fielding et al., 2022); reproducible per IETF Trust legal provisions |
+| `rfc9110_status_codes.md` | technical | https://www.rfc-editor.org/rfc/rfc9110 | RFC 9110 (IETF); excerpt with status-code-class table, reuse permitted with attribution |
 | `rfc1035_dns.md` | technical | https://www.rfc-editor.org/rfc/rfc1035.txt | IETF RFC 1035 (Mockapetris, 1987); reproducible per IETF Trust legal provisions |
 | `nist_csf_functions.md` | security | https://www.nist.gov/cyberframework | NIST CSWP 29, The NIST Cybersecurity Framework 2.0; U.S. Government work, public domain |
 | `nist_ai_rmf_functions.md` | security | https://www.nist.gov/itl/ai-risk-management-framework | NIST AI 100-1, Artificial Intelligence Risk Management Framework; U.S. Government work, public domain |

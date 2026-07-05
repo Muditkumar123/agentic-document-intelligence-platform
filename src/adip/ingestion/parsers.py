@@ -10,6 +10,7 @@ from pathlib import Path
 from adip.ingestion.models import Page
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
+SUPPORTED_PARSERS = {"default", "unstructured"}
 
 
 class UnsupportedDocumentError(ValueError):
@@ -51,7 +52,14 @@ def discover_documents(input_path: Path) -> list[Path]:
     return sorted(documents)
 
 
-def parse_document(path: Path) -> list[Page]:
+def parse_document(path: Path, parser: str = "default") -> list[Page]:
+    if parser not in SUPPORTED_PARSERS:
+        raise ValueError(f"Unsupported parser: {parser}")
+    if parser == "unstructured":
+        from adip.ingestion.unstructured_parser import parse_document_unstructured
+
+        return parse_document_unstructured(path)
+
     suffix = path.suffix.lower()
     if suffix in {".txt", ".md"}:
         return parse_text_document(path)

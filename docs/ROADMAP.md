@@ -19,6 +19,7 @@ Goal: convert documents into clean, traceable chunks.
 - Implement chunking with configurable chunk size and overlap.
 - Save processed chunks as JSONL.
 - Add unit tests with tiny fixture documents.
+- Add table extraction. Status: done — optional unstructured.io parser (`[tables]` extra, `--parser unstructured`) partitions documents into typed elements and serializes each table row with its column headers attached, so cells stay retrievable across chunk boundaries. PDF `Table` elements need unstructured's hi_res strategy (heavy vision models, documented upgrade path); markdown/HTML tables work out of the box.
 
 Deliverable:
 
@@ -33,7 +34,7 @@ Goal: answer questions with cited context.
 - Implement top-k search. Status: done.
 - Add hybrid retrieval. Status: done — `hybrid` backend fuses BM25 (Okapi, scikit-learn based, no extra dependencies) with dense rankings via weighted reciprocal-rank fusion, wired through the CLIs, API, and retrieval benchmark.
 - Add cited answer generation. Status: done as an extractive non-LLM baseline.
-- Add a small golden Q&A evaluation set. Status: done; later replaced by the real public-document corpus in `data/eval/` (45 answerable + 10 unanswerable questions).
+- Add a small golden Q&A evaluation set. Status: done; later replaced by the real public-document corpus in `data/eval/` (47 answerable + 10 unanswerable questions).
 
 Deliverable:
 

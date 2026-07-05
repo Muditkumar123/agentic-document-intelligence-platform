@@ -21,6 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, default=Path("data/processed/chunks.jsonl"))
     parser.add_argument("--chunk-size", type=int, default=800)
     parser.add_argument("--chunk-overlap", type=int, default=120)
+    parser.add_argument(
+        "--parser",
+        choices=["default", "unstructured"],
+        default="default",
+        help="Document parser. `unstructured` extracts tables (requires the [tables] extra).",
+    )
     parser.add_argument("--metrics-output", type=Path, default=Path("data/monitoring/ingestion_metrics.json"))
     parser.add_argument("--run-dir", type=Path, default=Path("data/monitoring/mlops_runs"))
     parser.add_argument("--enable-mlflow", action="store_true")
@@ -44,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "output": str(args.output),
                 "chunk_size": args.chunk_size,
                 "chunk_overlap": args.chunk_overlap,
+                "parser": args.parser,
                 "input_file_count": len(input_fingerprint),
             }
         )
@@ -52,6 +59,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_path=args.output,
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap,
+            parser=args.parser,
         )
         metrics = {
             "document_count": result.document_count,

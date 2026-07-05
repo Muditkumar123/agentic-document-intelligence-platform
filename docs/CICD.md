@@ -13,8 +13,8 @@ CI turns the project's deterministic evaluations into automated regression gates
 
 Runs only after `test` passes, and reproduces the evaluation pipeline end to end on a clean machine, against the **real public-document evaluation corpus** (`data/eval/`, markdown-only — no system PDF tooling needed):
 
-1. **Ingestion** — `run_ingestion` parses `data/eval/raw/` (18 real public docs across 5 categories) into `data/processed/chunks.jsonl`.
-2. **Retrieval eval** — `run_rag_eval` builds a TF-IDF index (`--no-faiss`, no reranker, hermetic) over the corpus, scored against `data/eval/golden_qa.jsonl` (45 questions), and writes `data/monitoring/rag_eval_metrics.json` with `hit_rate_at_k`, `mrr`, and per-category slices.
+1. **Ingestion** — `run_ingestion` parses `data/eval/raw/` (19 real public docs across 5 categories) into `data/processed/chunks.jsonl`.
+2. **Retrieval eval** — `run_rag_eval` builds a TF-IDF index (`--no-faiss`, no reranker, hermetic) over the corpus, scored against `data/eval/golden_qa.jsonl` (47 questions), and writes `data/monitoring/rag_eval_metrics.json` with `hit_rate_at_k`, `mrr`, and per-category slices.
 3. **Generation eval** — `run_generation_eval --abstention-threshold 0.10` answers the golden questions with the deterministic extractive writer, refusing when evidence is too weak, and writes `data/monitoring/generation_eval_metrics.json` with the `gen_eval_*` metrics (including refusal precision/recall over the 10 unanswerable questions).
 4. **Gate** — `eval_gate` compares those metrics against [`ci/eval_thresholds.json`](../ci/eval_thresholds.json) and exits non-zero if any check fails.
 

@@ -35,6 +35,9 @@ retrieval = [
 agents = [
   "langgraph>=0.2",
 ]
+tables = [
+  "unstructured[md,pdf]>=0.16",
+]
 ragas = [
   "ragas>=0.4,<0.5",
   "langchain-core>=0.3,<0.4",
