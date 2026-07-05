@@ -474,3 +474,120 @@ def test_resolve_candidate_k_widens_pool_only_when_reranking():
     assert resolve_candidate_k(3, 7, "lexical") == 7
     with pytest.raises(ValueError):
         resolve_candidate_k(5, 3, "lexical")
+
+
+def test_expand_query_keywords_adds_content_and_morphological_variants():
+    from adip.rag.rewrite import expand_query_keywords
+
+    variants = expand_query_keywords("What are the principles for processing personal data?")
+
+    assert variants[0] == "What are the principles for processing personal data?"
+    assert any("principles processing personal data" in v for v in variants)
+    assert any("principle" in v and "principles" not in v for v in variants)
+    assert len(variants) == len({v.lower() for v in variants})
+
+
+def test_rewrite_question_modes():
+    from adip.rag.rewrite import rewrite_question
+
+    assert rewrite_question("What is TLS?", rewriter="none") == ["What is TLS?"]
+    keyword_variants = rewrite_question("What are safe HTTP methods?", rewriter="keywords")
+    assert keyword_variants[0] == "What are safe HTTP methods?"
+    assert len(keyword_variants) >= 2
+
+    def fake(question):
+        return ["Which web verbs are safe?", "  ", "What are safe HTTP methods?"]
+
+    llm_variants = rewrite_question("What are safe HTTP methods?", rewriter="llm", llm_rewriter=fake)
+    assert llm_variants == ["What are safe HTTP methods?", "Which web verbs are safe?"]
+
+    with pytest.raises(ValueError):
+        rewrite_question("q", rewriter="mystery")
+    with pytest.raises(ValueError):
+        rewrite_question("q", rewriter="llm", llm_rewriter=None)
+
+
+def test_fuse_ranked_lists_promotes_consensus_chunks():
+    from adip.rag.retriever import RetrievedChunk
+    from adip.rag.rewrite import fuse_ranked_lists
+
+    chunk_a = {"chunk_id": "a", "text": "alpha"}
+    chunk_b = {"chunk_id": "b", "text": "beta"}
+    chunk_c = {"chunk_id": "c", "text": "gamma"}
+    list_one = [RetrievedChunk(chunk_a, 0.9, 1), RetrievedChunk(chunk_b, 0.5, 2)]
+    list_two = [RetrievedChunk(chunk_c, 0.8, 1), RetrievedChunk(chunk_a, 0.4, 2)]
+
+    fused = fuse_ranked_lists([list_one, list_two])
+
+    assert fused[0].chunk["chunk_id"] == "a"  # appears in both lists
+    assert fused[0].rank == 1
+    assert fused[0].score <= 1.0
+    assert {item.chunk["chunk_id"] for item in fused} == {"a", "b", "c"}
+
+
+def test_fuse_ranked_lists_rank_one_everywhere_scores_one():
+    from adip.rag.retriever import RetrievedChunk
+    from adip.rag.rewrite import fuse_ranked_lists
+
+    chunk = {"chunk_id": "a", "text": "alpha"}
+    fused = fuse_ranked_lists([[RetrievedChunk(chunk, 0.9, 1)], [RetrievedChunk(chunk, 0.7, 1)]])
+    assert fused[0].score == pytest.approx(1.0)
+
+
+def test_retrieve_with_rewrites_recovers_morphological_mismatch():
+    from adip.rag.rewrite import retrieve_with_rewrites, rewrite_question
+
+    chunks = [
+        make_chunk("chunk_principle", "The principle of storage limitation restricts retention."),
+        make_chunk("chunk_other", "Unrelated deployment notes about container images."),
+    ]
+    index = build_index(chunks)
+    question = "What are the principles that restrict retention?"
+
+    plain = index.search(question, top_k=1)
+    variants = rewrite_question(question, rewriter="keywords")
+    rewritten = retrieve_with_rewrites(index, variants, top_k=1)
+
+    assert rewritten[0].chunk["chunk_id"] == "chunk_principle"
+    assert plain == [] or plain[0].chunk["chunk_id"] == "chunk_principle"
+
+
+def test_parse_rewrites_tolerates_numbering_and_prose():
+    from adip.rag.rewrite import parse_rewrites
+
+    text = """Here are the rewrites:
+1. Which web verbs are considered safe?
+2) What request methods cannot modify state?
+- How do idempotent HTTP methods behave?
+Short one
+"""
+    rewrites = parse_rewrites(text)
+    assert rewrites == [
+        "Which web verbs are considered safe?",
+        "What request methods cannot modify state?",
+        "How do idempotent HTTP methods behave?",
+    ]
+
+
+def test_evaluate_with_rewriter_reports_rewriter_metadata(tmp_path):
+    chunks = [
+        make_chunk("chunk_ingest", "The platform can ingest long documents and split text into overlapping chunks."),
+    ]
+    index_path = tmp_path / "vector_index"
+    build_index(chunks).save(index_path)
+    golden_path = tmp_path / "golden.jsonl"
+    golden_path.write_text(
+        json.dumps(
+            {
+                "question": "How does the platform ingest documents?",
+                "expected_substrings": ["split text into overlapping chunks"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = evaluate(index_path, golden_path, top_k=1, rewriter="keywords")
+
+    assert report["rewriter"] == "keywords"
+    assert report["hit_rate_at_k"] == 1.0

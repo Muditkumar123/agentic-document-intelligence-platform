@@ -27,6 +27,7 @@ from adip.rag.answer import build_extractive_answer
 from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.rerank import rerank_results, resolve_candidate_k
 from adip.rag.retriever import build_index, load_index, summarize_index_documents
+from adip.rag.rewrite import retrieve_with_rewrites, rewrite_question
 
 SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md"}
 
@@ -294,8 +295,10 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
     index = load_index(request.index_path)
     candidate_k = resolve_candidate_k(request.top_k, request.candidate_k, request.reranker)
 
-    candidates = index.search(
-        request.question,
+    variants = rewrite_question(request.question, rewriter=request.rewriter)
+    candidates = retrieve_with_rewrites(
+        index,
+        variants,
         top_k=candidate_k,
         document_filter=request.document_filter,
     )
@@ -323,6 +326,8 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
         "top_k": request.top_k,
         "candidate_k": candidate_k,
         "reranker": request.reranker,
+        "rewriter": request.rewriter,
+        "query_variants": variants,
         "cross_encoder_model": request.cross_encoder_model if request.reranker == "cross_encoder" else None,
         "latency_ms": latency_ms,
         "quality": quality_summary(answer, retrieved_records),

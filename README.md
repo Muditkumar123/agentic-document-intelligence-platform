@@ -126,6 +126,8 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.rag.evaluate \
 
 The project includes a local `scikit-learn` TF-IDF vector baseline, dense retrieval, and a `hybrid` backend that fuses BM25 with dense rankings via weighted reciprocal-rank fusion (`--backend hybrid`, tunable with `--rrf-k` and `--hybrid-dense-weight`). Dense retrieval defaults to dependency-light LSA embeddings and can use `sentence-transformers` plus FAISS when those optional dependencies are installed. When a reranker is enabled, the first-stage candidate pool automatically widens to 3x `top_k` (at least 10) unless `--candidate-k` is set explicitly.
 
+**Query rewriting** (`--rewriter`) expands the question into variants before retrieval and fuses the per-variant rankings with RRF: `keywords` is deterministic (content terms + singular/plural variants), and `llm` generates paraphrases with any OpenAI-compatible model via the versioned `rewrite_v1` prompt. Measured on the 20-question **paraphrase probe set** (`data/eval/paraphrase_probes.jsonl` — reworded golden questions with no lexical bridge): plain TF-IDF drops to 0.85 hit@5, hybrid alone reaches 0.95, and **hybrid + LLM rewriting reaches 1.00 hit@5 / 0.904 MRR** at ~2.3 s/query (an offline quality mode; the CI path stays deterministic). See [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md#paraphrase-probe-set-dataevalparaphrase_probesjsonl).
+
 Compare retrieval backends:
 
 ```bash

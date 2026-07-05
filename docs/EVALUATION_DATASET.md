@@ -83,6 +83,29 @@ The same `EntailmentScorer` interface lets any answerability model be swapped in
 - Whether LLMOps run metadata is findable.
 - Whether local model roles for Qwen and DeepSeek are findable.
 
+## Paraphrase Probe Set (`data/eval/paraphrase_probes.jsonl`)
+
+The golden questions share vocabulary with the corpus, which is why retrieval saturates at 1.0. The probe set breaks that: **20 honest rewordings** of golden questions (one per row, `paraphrase_of` records the original) phrased the way a real user would ask — "Can I make a website delete everything it knows about me?" instead of "what is the right to be forgotten?". Same `expected_substrings`, same scoring, but the lexical bridge is gone.
+
+Measured (top-k 5, no reranker):
+
+| Variant | Probes hit@5 | Probes MRR |
+| --- | --- | --- |
+| tfidf | 0.850 | 0.742 |
+| tfidf + keywords rewriter | 0.850 | 0.750 |
+| tfidf + LLM rewriter | 0.950 | 0.817 |
+| hybrid | 0.950 | 0.767 |
+| hybrid + keywords rewriter | 0.950 | 0.750 |
+| **hybrid + LLM rewriter** | **1.000** | **0.904** |
+
+Three findings:
+
+1. The probes are the first **unsaturated retrieval eval** in the project — TF-IDF drops to 0.85 hit rate when the words change.
+2. **Hybrid retrieval's value is now measured**, not asserted: +0.10 hit rate over TF-IDF on paraphrases (the golden set could never show this).
+3. **Deterministic keyword rewriting is flat** (morphology isn't the failure mode; semantics is), while **LLM multi-query rewriting** recovers the gap — perfect hit rate with hybrid — at ~2.3 s/query, so it is an offline/quality mode, not the CI path.
+
+Regression check on the original golden set with the LLM rewriter: hit rate stays **1.000** on both backends (MRR dips slightly — tfidf 1.0 → 0.982, hybrid 0.978 → 0.945 — because fusing variant rankings can nudge the exact-match chunk off rank 1). Rewriting buys paraphrase robustness without losing any answers.
+
 ## Latest Benchmark Snapshot
 
 After expanding the corpus and adding cross-encoder reranking:
