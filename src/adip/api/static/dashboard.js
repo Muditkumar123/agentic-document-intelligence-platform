@@ -13,7 +13,7 @@ const state = {
 document.addEventListener("DOMContentLoaded", () => {
   bindModeTabs();
   bindForms();
-  refreshHealth();
+  watchColdStart();
   refreshBenchmark();
   refreshGenerationEval();
   refreshModelProfiles();
@@ -35,6 +35,9 @@ function bindModeTabs() {
         loadAgentHistory();
         loadMlopsHistory();
       }
+      if (state.activeMode === "eval") {
+        loadEvaluation();
+      }
     });
   });
 }
@@ -42,8 +45,17 @@ function bindModeTabs() {
 function bindForms() {
   $("ragForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if ($("ragCompareBackends").checked) {
+      await runBackendComparison(event.currentTarget);
+      return;
+    }
     await runRequest(event.currentTarget, "/rag/query", buildRagPayload(), renderRagResult);
   });
+  $("ragBackend").addEventListener("change", () => {
+    $("ragIndexPath").value = indexPathForBackend($("ragBackend").value);
+    refreshIndexedDocuments();
+  });
+  $("refreshEval").addEventListener("click", () => loadEvaluation());
 
   $("agentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -664,13 +676,17 @@ function renderRagResult(payload) {
 
 function renderAgentResult(payload) {
   const statePayload = payload.state || {};
+  const metrics = statePayload.metrics || {};
   setResultTitle("Agent Run");
   setLatency(payload.latency_ms);
   renderAnswer(agentAnswerText(statePayload));
   renderAnswerWarning(payload.answer_warning);
   renderQuality(payload.quality);
   renderCitations(statePayload.retrieved || []);
-  renderTrace(statePayload.trace || []);
+  renderTrace(statePayload.trace || [], {
+    engine: metrics.workflow_engine,
+    totalMs: metrics.workflow_duration_ms,
+  });
   renderRaw(payload);
 }
 
@@ -866,7 +882,10 @@ async function loadAgentTraceDetail(runId) {
     renderAnswerWarning(trace.llmops ? trace.llmops.answer_warning : null);
     renderQuality(trace.llmops ? trace.llmops.quality : null);
     renderCitations(trace.retrieved || []);
-    renderTrace(trace.trace || []);
+    renderTrace(trace.trace || [], {
+      engine: trace.metrics ? trace.metrics.workflow_engine : null,
+      totalMs: trace.metrics ? trace.metrics.workflow_duration_ms : null,
+    });
     renderRaw(payload);
   } catch (error) {
     renderError(error);
@@ -974,23 +993,60 @@ function renderCitations(items) {
   });
 }
 
-function renderTrace(events) {
+function renderTrace(events, meta) {
   const list = $("traceList");
   list.innerHTML = "";
   if (!events.length) {
     list.appendChild(emptyState("No trace events"));
     return;
   }
-  events.forEach((event) => {
-    const node = document.createElement("article");
-    node.className = "trace-item";
-    node.innerHTML = `
-      <p class="item-title">${escapeHtml(event.node_name || "node")}</p>
-      <p class="item-meta">${escapeHtml(event.status || "status")}${event.duration_ms == null ? "" : ` | ${formatScore(event.duration_ms)} ms`}</p>
-      <p class="item-meta">Retrieved ${safeCount(event.output_summary, "retrieved_count")} | Citations ${safeCount(event.output_summary, "citation_count")}</p>
+
+  if (meta && meta.engine) {
+    const badgeRow = document.createElement("div");
+    badgeRow.className = "trace-meta-row";
+    const engineClass = meta.engine === "langgraph" ? "engine-badge langgraph" : "engine-badge";
+    badgeRow.innerHTML = `
+      <span class="${engineClass}">${escapeHtml(meta.engine)} engine</span>
+      ${meta.totalMs == null ? "" : `<span class="trace-total">${formatScore(meta.totalMs)} ms total</span>`}
     `;
+    list.appendChild(badgeRow);
+  }
+
+  const maxDuration = Math.max(
+    1,
+    ...events.map((event) => (event.duration_ms == null ? 0 : event.duration_ms))
+  );
+  events.forEach((event, position) => {
+    const node = document.createElement("article");
+    const failed = event.status === "failed";
+    node.className = failed ? "trace-step failed" : "trace-step";
+    const width = Math.max(2, Math.round(((event.duration_ms || 0) / maxDuration) * 100));
+    node.innerHTML = `
+      <div class="trace-step-head">
+        <span class="trace-step-index">${position + 1}</span>
+        <span class="trace-step-name">${escapeHtml(event.node_name || "node")}</span>
+        <span class="trace-step-status">${escapeHtml(event.status || "status")}</span>
+        <span class="trace-step-duration">${event.duration_ms == null ? "-" : `${formatScore(event.duration_ms)} ms`}</span>
+      </div>
+      <div class="trace-step-bar"><span style="width:${width}%"></span></div>
+      <div class="trace-step-details hidden">
+        ${event.error ? `<p class="trace-step-error">${escapeHtml(event.error)}</p>` : ""}
+        <p class="item-meta">Retrieved ${safeCount(event.output_summary, "retrieved_count")} | Citations ${safeCount(event.output_summary, "citation_count")} | Plan steps ${safeCount(event.output_summary, "plan_step_count")} | Answer chars ${safeCount(event.output_summary, "answer_char_count")}</p>
+        <p class="item-meta">Status after node: ${escapeHtml(stateField(event.output_summary, "status"))} | Task: ${escapeHtml(stateField(event.output_summary, "task_type"))}</p>
+      </div>
+    `;
+    node.addEventListener("click", () => {
+      node.querySelector(".trace-step-details").classList.toggle("hidden");
+    });
     list.appendChild(node);
   });
+}
+
+function stateField(summary, key) {
+  if (!summary || summary[key] == null) {
+    return "-";
+  }
+  return String(summary[key]);
 }
 
 function setHistoryLoading(id) {
@@ -1156,6 +1212,7 @@ function renderMarkdown(source) {
 }
 
 function renderAnswer(text) {
+  showResultView("standard");
   const node = $("answerText");
   if (!node) {
     return;
@@ -1340,4 +1397,307 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+// ---------------------------------------------------------------------------
+// Result-panel view switching (standard answer view / backend comparison /
+// evaluation overview share the same panel).
+
+function showResultView(view) {
+  $("standardResult").classList.toggle("hidden", view !== "standard");
+  $("compareView").classList.toggle("hidden", view !== "compare");
+  $("evalView").classList.toggle("hidden", view !== "eval");
+}
+
+// ---------------------------------------------------------------------------
+// Cold-start handling: the free hosting tier spins the instance down when idle,
+// so the first page load can take ~a minute. Poll /health with patience, keep a
+// banner up while waking, and unlock the page when the service responds.
+
+async function watchColdStart() {
+  const banner = $("coldStartBanner");
+  const started = Date.now();
+  const maxWaitMs = 180000;
+  let firstFailure = true;
+
+  const attempt = async () => {
+    try {
+      await refreshHealth();
+      const status = $("serviceStatus");
+      if (status.classList.contains("ok")) {
+        banner.classList.add("hidden");
+        setActionsDisabled(false);
+        return;
+      }
+      throw new Error("not ready");
+    } catch (error) {
+      if (firstFailure) {
+        firstFailure = false;
+        banner.classList.remove("hidden");
+        setActionsDisabled(true);
+      }
+      if (Date.now() - started < maxWaitMs) {
+        setTimeout(attempt, 5000);
+      } else {
+        banner.textContent = "The service is not responding. Refresh the page to retry.";
+      }
+    }
+  };
+  await attempt();
+}
+
+function setActionsDisabled(disabled) {
+  document.querySelectorAll(".primary-action").forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Retrieval backend comparison: fire the same question at the tfidf, dense, and
+// hybrid indexes in parallel and render the ranked lists side by side.
+
+const INDEX_PATH_BY_BACKEND = {
+  tfidf: "data/processed/vector_index",
+  dense: "data/processed/vector_index_dense",
+  hybrid: "data/processed/vector_index_hybrid",
+};
+const BACKEND_LABELS = {
+  tfidf: "TF-IDF (sparse)",
+  dense: "Dense LSA (semantic)",
+  hybrid: "Hybrid (BM25 + dense)",
+};
+
+function indexPathForBackend(backend) {
+  return INDEX_PATH_BY_BACKEND[backend] || INDEX_PATH_BY_BACKEND.tfidf;
+}
+
+async function runBackendComparison(form) {
+  const button = form.querySelector("button[type='submit']");
+  const originalText = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<span class="button-icon">...</span> Comparing';
+  setResultTitle("Comparing Backends");
+
+  const base = buildRagPayload();
+  const backends = ["tfidf", "dense", "hybrid"];
+  const started = performance.now();
+  try {
+    const results = await Promise.all(
+      backends.map(async (backend) => {
+        try {
+          const payload = await postJson("/rag/query", {
+            ...base,
+            index_path: indexPathForBackend(backend),
+          });
+          return { backend, payload };
+        } catch (error) {
+          return { backend, error };
+        }
+      })
+    );
+    renderComparison(base.question, results);
+    setLatency(performance.now() - started);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalText;
+    refreshHealth();
+  }
+}
+
+function renderComparison(question, results) {
+  setResultTitle("Backend Comparison");
+  showResultView("compare");
+  const view = $("compareView");
+  const reference = results[0] && results[0].payload ? results[0].payload.retrieved || [] : [];
+  const referenceIds = reference.map((item) => (item.chunk || {}).chunk_id);
+
+  const columns = results
+    .map(({ backend, payload, error }) => {
+      const label = BACKEND_LABELS[backend] || backend;
+      if (error) {
+        return `
+          <div class="compare-column">
+            <h3>${escapeHtml(label)}</h3>
+            <p class="compare-error">${escapeHtml(error.message || "Query failed")}. If this index is missing, rebuild it from the Documents tab (backend: ${escapeHtml(backend)}).</p>
+          </div>`;
+      }
+      const items = payload.retrieved || [];
+      const maxScore = Math.max(0.0001, ...items.map((item) => item.score || 0));
+      const rows = items
+        .map((item) => {
+          const chunk = item.chunk || {};
+          const differs =
+            backend !== "tfidf" && referenceIds[item.rank - 1] !== undefined &&
+            referenceIds[item.rank - 1] !== chunk.chunk_id;
+          const width = Math.max(3, Math.round(((item.score || 0) / maxScore) * 100));
+          return `
+            <article class="compare-item${differs ? " differs" : ""}">
+              <p class="item-title">#${item.rank} ${escapeHtml(chunk.filename || "source")} <span class="compare-page">p.${escapeHtml(String(chunk.page_number == null ? "?" : chunk.page_number))}</span>${differs ? '<span class="diff-flag">differs</span>' : ""}</p>
+              <div class="compare-score-bar"><span style="width:${width}%"></span></div>
+              <p class="item-meta">score ${formatScore(item.score)}</p>
+              <p class="item-meta">${escapeHtml(snippet(chunk.text || ""))}</p>
+            </article>`;
+        })
+        .join("");
+      return `
+        <div class="compare-column">
+          <h3>${escapeHtml(label)}</h3>
+          <p class="compare-meta">${payload.latency_ms == null ? "" : `${formatScore(payload.latency_ms)} ms`} | reranker ${escapeHtml(payload.reranker || "none")}</p>
+          ${rows || '<p class="compare-error">No results above the score floor.</p>'}
+        </div>`;
+    })
+    .join("");
+
+  view.innerHTML = `
+    <div class="compare-head">
+      <h3>Same question, three retrieval strategies</h3>
+      <p class="item-meta">${escapeHtml(question)}</p>
+      <p class="compare-note">Rows flagged <span class="diff-flag">differs</span> rank a different chunk than TF-IDF at the same position. Scores are not comparable across backends (cosine vs normalized RRF), so each column's bars are scaled to its own top score.</p>
+    </div>
+    <div class="compare-grid">${columns}</div>
+  `;
+  renderRaw(results.map(({ backend, payload, error }) => ({ backend, error: error ? String(error.message || error) : null, payload })));
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation tab: deterministic CI metrics + retrieval benchmark + offline
+// judge/RAGAS snapshot, with agreement panels.
+
+const CI_FLOORS = {
+  gen_eval_mean_faithfulness: { label: "Faithfulness", bound: ">= 0.45" },
+  gen_eval_grounded_rate: { label: "Grounded rate", bound: ">= 0.80" },
+  gen_eval_mean_expected_coverage: { label: "Expected coverage", bound: ">= 0.65" },
+  gen_eval_mean_answer_relevance: { label: "Answer relevance", bound: ">= 0.80" },
+  gen_eval_mean_citation_coverage: { label: "Citation coverage", bound: ">= 0.55" },
+  gen_eval_refusal_precision: { label: "Refusal precision", bound: ">= 0.80" },
+  gen_eval_refusal_recall: { label: "Refusal recall", bound: ">= 0.40" },
+  gen_eval_refusal_rate: { label: "Refusal rate", bound: "<= 0.20" },
+};
+
+async function loadEvaluation() {
+  setResultTitle("Evaluation Overview");
+  showResultView("eval");
+  const view = $("evalView");
+  view.innerHTML = '<p class="item-meta">Loading evaluation data…</p>';
+
+  const [generation, benchmark, offline] = await Promise.all([
+    getJson("/monitoring/generation-eval").catch(() => ({ available: false })),
+    getJson("/monitoring/retrieval-benchmark").catch(() => ({ available: false })),
+    getJson("/monitoring/offline-eval").catch(() => ({ available: false })),
+  ]);
+
+  view.innerHTML = [
+    renderDeterministicPanel(generation),
+    renderBenchmarkPanel(benchmark),
+    renderJudgePanel(offline),
+    renderRagasPanel(offline),
+    renderAgreementPanel(generation, offline),
+  ].join("");
+  renderRaw({ generation, benchmark, offline });
+}
+
+function evalTile(label, value, note) {
+  return `
+    <div class="eval-tile">
+      <span>${escapeHtml(label)}</span>
+      <strong>${value}</strong>
+      ${note ? `<em>${escapeHtml(note)}</em>` : ""}
+    </div>`;
+}
+
+function renderDeterministicPanel(generation) {
+  if (!generation.available) {
+    return '<section class="eval-panel"><h3>Deterministic metrics (CI-gated)</h3><p class="item-meta">Not available — run the generation eval to populate.</p></section>';
+  }
+  const metrics = generation.metrics || {};
+  const tiles = Object.entries(CI_FLOORS)
+    .map(([key, spec]) =>
+      evalTile(spec.label, formatScore(metrics[key]), `CI ${spec.bound}`)
+    )
+    .join("");
+  return `
+    <section class="eval-panel">
+      <h3>Deterministic metrics (CI-gated)</h3>
+      <p class="eval-panel-note">Recomputed on every build with the extractive writer over the real-document corpus (${safeDisplay(metrics.gen_eval_case_count)} cases). A pull request that pushes any value past its bound cannot merge.</p>
+      <div class="eval-grid">${tiles}</div>
+    </section>`;
+}
+
+function renderBenchmarkPanel(benchmark) {
+  if (!benchmark.available) {
+    return '<section class="eval-panel"><h3>Retrieval benchmark</h3><p class="item-meta">Not available — run the retrieval benchmark to populate.</p></section>';
+  }
+  const metrics = benchmark.metrics || {};
+  const variants = ["tfidf", "dense_lsa", "hybrid"]
+    .map((variant) => {
+      const mrr = metrics[`${variant}_mrr`];
+      if (mrr === undefined) {
+        return "";
+      }
+      return evalTile(labelMetric(variant), formatScore(mrr), "MRR");
+    })
+    .join("");
+  return `
+    <section class="eval-panel">
+      <h3>Retrieval benchmark</h3>
+      <p class="eval-panel-note">Best plain backend: <strong>${escapeHtml(labelMetric(benchmark.best_backend_by_mrr))}</strong> · best variant: <strong>${escapeHtml(labelMetric(benchmark.best_variant_by_mrr))}</strong>. Hit rate is saturated at 1.0 on this corpus, so MRR (and the graded RAGAS context metrics below) carry the signal.</p>
+      <div class="eval-grid">${variants || evalTile("Variants", safeDisplay(metrics.variant_count), "in last benchmark")}</div>
+    </section>`;
+}
+
+function renderJudgePanel(offline) {
+  if (!offline.available || !offline.judge) {
+    return '<section class="eval-panel"><h3>LLM-as-judge (offline)</h3><p class="item-meta">No judge snapshot committed. Run run_generation_eval with --judge-model-name and commit the snapshot.</p></section>';
+  }
+  const judge = offline.judge;
+  const inter = offline.inter_judge || {};
+  return `
+    <section class="eval-panel">
+      <h3>LLM-as-judge (offline · ${escapeHtml(judge.judge_model || "judge")} · ${escapeHtml(judge.run_date || "")})</h3>
+      <div class="eval-grid">
+        ${evalTile("Judge faithfulness", formatScore(judge.judge_mean_faithfulness), `${safeDisplay(judge.judged_count)}/${safeDisplay(judge.total_answered)} answers judged`)}
+        ${evalTile("Judge relevance", formatScore(judge.judge_mean_relevance), "the writer's real weakness")}
+        ${evalTile("Gap vs lexical proxy", formatScore(judge.judge_lexical_faithfulness_gap), "proxy underestimates")}
+        ${evalTile("Inter-judge relevance r", formatScore(inter.relevance_correlation), `vs ${(inter.second_judge_model || "").split(" ")[0]}`)}
+      </div>
+      <p class="eval-panel-note">${escapeHtml(judge.finding || "")}</p>
+    </section>`;
+}
+
+function renderRagasPanel(offline) {
+  if (!offline.available || !offline.ragas) {
+    return '<section class="eval-panel"><h3>RAGAS (offline)</h3><p class="item-meta">No RAGAS snapshot committed. Install the [ragas] extra and run run_generation_eval with --ragas-model-name.</p></section>';
+  }
+  const ragas = offline.ragas;
+  return `
+    <section class="eval-panel">
+      <h3>RAGAS (offline · ${escapeHtml(ragas.ragas_llm || "LLM")} · ${escapeHtml(ragas.run_date || "")})</h3>
+      <div class="eval-grid">
+        ${evalTile("Faithfulness", formatScore(ragas.ragas_mean_faithfulness), "claim decomposition")}
+        ${evalTile("Answer relevancy", formatScore(ragas.ragas_mean_answer_relevancy), "see caveat")}
+        ${evalTile("Context precision", formatScore(ragas.ragas_mean_context_precision), "graded retrieval")}
+        ${evalTile("Context recall", formatScore(ragas.ragas_mean_context_recall), "graded retrieval")}
+      </div>
+      <p class="eval-panel-note"><strong>Finding:</strong> ${escapeHtml(ragas.finding || "")}</p>
+      <p class="eval-panel-note"><strong>Caveat:</strong> ${escapeHtml(ragas.answer_relevancy_caveat || "")}</p>
+    </section>`;
+}
+
+function renderAgreementPanel(generation, offline) {
+  const lexical = generation.available ? generation.faithfulness : null;
+  const judge = offline.available && offline.judge ? offline.judge.judge_mean_faithfulness : null;
+  const ragas = offline.available && offline.ragas ? offline.ragas.ragas_mean_faithfulness : null;
+  if (lexical == null && judge == null && ragas == null) {
+    return "";
+  }
+  return `
+    <section class="eval-panel">
+      <h3>Three scorers, one story: faithfulness</h3>
+      <div class="eval-grid">
+        ${evalTile("Lexical proxy (CI)", formatScore(lexical), "token overlap — deterministic")}
+        ${evalTile("LLM judge", formatScore(judge), "semantic — frontier model")}
+        ${evalTile("RAGAS", formatScore(ragas), "claim decomposition — local 8B")}
+      </div>
+      <p class="eval-panel-note">The judge and RAGAS agree the extractive writer fabricates nothing (~0.93–0.97); the lexical proxy reads low (~0.59) because verbatim answers carry formatting tokens. Measuring that disagreement — instead of trusting any single number — is the point of this tab.</p>
+    </section>`;
 }

@@ -13,16 +13,31 @@
       defer
       src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
     ></script>
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260702-docs1" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20260704-ui1" />
   </head>
   <body>
     <header class="topbar">
       <div>
         <p class="eyebrow">Document Intelligence</p>
         <h1>Agentic Document Intelligence</h1>
+        <p class="tagline">
+          Ask questions about real documents — every answer cited, every metric measured,
+          every regression blocked in CI.
+        </p>
+        <div class="hero-badges" id="heroBadges">
+          <span class="hero-badge">LangGraph agent</span>
+          <span class="hero-badge">Hybrid BM25 + dense retrieval</span>
+          <span class="hero-badge">RAGAS + LLM-judge evals</span>
+        </div>
       </div>
       <div class="status" id="serviceStatus">Checking</div>
     </header>
+
+    <div class="coldstart-banner hidden" id="coldStartBanner" role="status">
+      <span class="coldstart-spinner" aria-hidden="true"></span>
+      Free-tier instance is waking up — this usually takes under a minute. The page will
+      unlock automatically.
+    </div>
 
     <main>
       <section class="metric-band" aria-label="Retrieval benchmark">
@@ -66,9 +81,10 @@
       <section class="workspace">
         <aside class="control-panel">
           <div class="mode-tabs" role="tablist" aria-label="Workflow mode">
-            <button class="mode-tab active" type="button" data-mode="rag">RAG</button>
+            <button class="mode-tab active" type="button" data-mode="rag">Query</button>
             <button class="mode-tab" type="button" data-mode="agent">Agent</button>
-            <button class="mode-tab" type="button" data-mode="index">Index</button>
+            <button class="mode-tab" type="button" data-mode="eval">Evaluation</button>
+            <button class="mode-tab" type="button" data-mode="index">Documents</button>
             <button class="mode-tab" type="button" data-mode="history">History</button>
           </div>
 
@@ -97,6 +113,18 @@
                 <input id="ragCandidateK" type="number" min="1" value="10" />
               </label>
             </div>
+            <label>
+              Retrieval Backend
+              <select id="ragBackend">
+                <option value="tfidf" selected>TF-IDF (sparse)</option>
+                <option value="dense">Dense LSA (semantic)</option>
+                <option value="hybrid">Hybrid (BM25 + dense, RRF)</option>
+              </select>
+            </label>
+            <label class="checkbox-row">
+              <input id="ragCompareBackends" type="checkbox" />
+              <span>Compare all three backends side-by-side</span>
+            </label>
             <label>
               Reranker
               <select id="ragReranker">
@@ -267,6 +295,25 @@
             </button>
           </form>
 
+          <section class="workflow-form hidden" id="evalPanel" data-mode-panel="eval">
+            <p class="panel-note">
+              Every quality claim in this project is a measured number. This tab shows the
+              three evaluation layers side by side: the deterministic metrics that gate CI,
+              the LLM-as-judge second opinion, and the standardized RAGAS metrics — plus how
+              much they agree with each other.
+            </p>
+            <button class="secondary-action" id="refreshEval" type="button">
+              <span class="button-icon">E</span>
+              Refresh Evaluation Data
+            </button>
+            <div class="eval-legend">
+              <h3>How to read it</h3>
+              <p><strong>Deterministic</strong> metrics rerun on every build and enforce CI floors.</p>
+              <p><strong>Judge / RAGAS</strong> call live models, so they run offline; the latest dated run is shown.</p>
+              <p><strong>Agreement</strong> (gap + correlation) tells you when the cheap proxy can be trusted.</p>
+            </div>
+          </section>
+
           <form class="workflow-form hidden" id="indexForm" data-mode-panel="index">
             <label>
               Upload Document
@@ -300,6 +347,7 @@
                 <select id="indexBackend">
                   <option value="tfidf" selected>TF-IDF</option>
                   <option value="dense">Dense LSA</option>
+                  <option value="hybrid">Hybrid (BM25 + dense)</option>
                 </select>
               </label>
               <label>
@@ -370,27 +418,32 @@
             </div>
           </div>
 
-          <div class="answer-block">
-            <h3>Answer</h3>
-            <div id="answerWarning" class="answer-warning" role="status" hidden></div>
-            <div id="answerText" class="answer-body">Run a workflow to populate the answer.</div>
+          <div id="standardResult">
+            <div class="answer-block">
+              <h3>Answer</h3>
+              <div id="answerWarning" class="answer-warning" role="status" hidden></div>
+              <div id="answerText" class="answer-body">Run a workflow to populate the answer.</div>
+            </div>
+
+            <section class="quality-block" aria-label="Answer quality">
+              <h3>Quality</h3>
+              <div class="quality-grid" id="qualityGrid"></div>
+            </section>
+
+            <div class="two-column">
+              <div>
+                <h3>Citations</h3>
+                <div class="citation-list" id="citationList"></div>
+              </div>
+              <div>
+                <h3>Trace</h3>
+                <div class="trace-list" id="traceList"></div>
+              </div>
+            </div>
           </div>
 
-          <section class="quality-block" aria-label="Answer quality">
-            <h3>Quality</h3>
-            <div class="quality-grid" id="qualityGrid"></div>
-          </section>
-
-          <div class="two-column">
-            <div>
-              <h3>Citations</h3>
-              <div class="citation-list" id="citationList"></div>
-            </div>
-            <div>
-              <h3>Trace</h3>
-              <div class="trace-list" id="traceList"></div>
-            </div>
-          </div>
+          <div id="compareView" class="hidden" aria-label="Backend comparison"></div>
+          <div id="evalView" class="hidden" aria-label="Evaluation overview"></div>
 
           <details class="raw-block">
             <summary>Raw JSON</summary>
@@ -400,6 +453,6 @@
       </section>
     </main>
 
-    <script src="/static/dashboard.js?v=20260702-docs1" defer></script>
+    <script src="/static/dashboard.js?v=20260704-ui1" defer></script>
   </body>
 </html>
