@@ -44,12 +44,15 @@ The dashboard is served by the FastAPI app and calls the same HTTP endpoints as 
 
 It includes:
 
-- Retrieval benchmark summary.
-- RAG query form with reranker controls.
+- Retrieval benchmark summary and a hero strip explaining the platform to first-time visitors.
+- Query form with a **retrieval backend picker** (tfidf / dense / hybrid) and a **compare mode** that fires the same question at all three backends and renders the ranked lists side by side, flagging rank positions where a backend disagrees with TF-IDF.
 - Agent run form with task, domain, writer model, reasoning model, custom model entry, GPU device, API key, endpoint, and token controls.
-- Document upload and index rebuild form.
+- **Agent trace stepper**: each LangGraph node as an expandable card with status, a duration bar, and state summaries, plus an engine badge (`langgraph` / `sequential`).
+- **Evaluation tab**: deterministic CI-gated metrics with their floors, the retrieval benchmark, and the committed offline judge + RAGAS snapshot with agreement panels ("three scorers, one story").
+- Document upload and index rebuild form (all backends).
 - Run history browser for AgentOps traces and MLOps runs.
-- Answer, quality, citation, trace, latency, export, and raw JSON panes.
+- Answer, quality, citation, latency, export, and raw JSON panes.
+- A cold-start banner for free-tier hosting: the page polls `/health` while the instance wakes and unlocks automatically.
 
 Recommended model setup:
 
@@ -156,6 +159,14 @@ curl http://127.0.0.1:8010/monitoring/retrieval-benchmark
 ```
 
 This returns the current retrieval benchmark headline metrics for the dashboard.
+
+## Offline Evaluation Snapshot
+
+```bash
+curl http://127.0.0.1:8010/monitoring/offline-eval
+```
+
+Returns the committed snapshot of offline evaluations (LLM-as-judge, inter-judge agreement, RAGAS) from `data/reference/offline_eval_snapshot.json`. These evaluations call live models, so they cannot run in the deterministic container build; the latest dated run is committed instead and the dashboard's Evaluation tab labels it accordingly. Returns `{"available": false}` when no snapshot is committed.
 
 ## Run History
 

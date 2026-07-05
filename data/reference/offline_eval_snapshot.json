@@ -1,0 +1,41 @@
+{
+  "description": "Committed snapshot of offline (non-CI) evaluation runs: LLM-as-judge and RAGAS. These evaluations call live models, so they run offline and their latest results are recorded here for the dashboard. The deterministic CI metrics are regenerated on every build and served separately.",
+  "corpus": "data/eval (18 real public documents, 45 answerable + 10 unanswerable golden questions)",
+  "writer": "extractive_baseline",
+  "judge": {
+    "run_date": "2026-07-03",
+    "judge_model": "gemini-2.5-flash",
+    "judged_count": 20,
+    "total_answered": 45,
+    "coverage_note": "Free-tier daily quota reached after 20 answers; each 429 was skipped gracefully.",
+    "judge_mean_faithfulness": 0.965,
+    "judge_mean_relevance": 0.338,
+    "judge_lexical_faithfulness_gap": 0.407,
+    "judge_lexical_correlation": 0.0,
+    "finding": "The lexical proxy underestimates extractive faithfulness (verbatim answers fabricate nothing), and judge relevance 0.338 exposes the extractive writer's real weakness: it returns a relevant chunk without directly answering."
+  },
+  "inter_judge": {
+    "run_date": "2026-07-03",
+    "second_judge_model": "Qwen/Qwen3-8B (local adip.serving)",
+    "overlap_count": 20,
+    "relevance_gap": 0.222,
+    "relevance_correlation": 0.615,
+    "faithfulness_gap": 0.585,
+    "faithfulness_correlation": 0.0,
+    "finding": "Judges agree on relevance, disagree on faithfulness: the local 8B free-form judge shows dimension bleed. Policy: local judge for relevance sweeps, frontier judge for faithfulness."
+  },
+  "ragas": {
+    "run_date": "2026-07-04",
+    "ragas_llm": "Qwen/Qwen3-8B (local adip.serving)",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "scored_count": 10,
+    "ragas_mean_faithfulness": 0.9246,
+    "ragas_mean_answer_relevancy": 1.0,
+    "ragas_mean_context_precision": 1.0,
+    "ragas_mean_context_recall": 1.0,
+    "ragas_lexical_faithfulness_gap": 0.313,
+    "ragas_lexical_correlation": -0.093,
+    "answer_relevancy_caveat": "Not trusted at 1.0: extractive answers echo the question's vocabulary, and the local server returns 1 generation where RAGAS requests 3. The judge's 0.338 relevance is the discerning verdict.",
+    "finding": "Metric design beats judge size: the same local 8B that scored faithfulness 0.40 as a free-form judge scores 0.925 through RAGAS claim decomposition, within 0.05 of the frontier judge."
+  }
+}

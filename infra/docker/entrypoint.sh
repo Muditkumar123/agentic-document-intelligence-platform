@@ -18,4 +18,14 @@ if [ ! -d data/processed/vector_index ]; then
     --report-output data/monitoring/generation_eval_report.json
 fi
 
+# Per-backend indexes for the dashboard's retrieval comparison (cheap on the demo corpus).
+if [ ! -d data/processed/vector_index_dense ]; then
+  python -m adip.rag.index --chunks data/processed/chunks.jsonl \
+    --index data/processed/vector_index_dense --backend dense --no-faiss
+fi
+if [ ! -d data/processed/vector_index_hybrid ]; then
+  python -m adip.rag.index --chunks data/processed/chunks.jsonl \
+    --index data/processed/vector_index_hybrid --backend hybrid
+fi
+
 exec python -m adip.api --host 0.0.0.0 --port "${PORT:-8010}"
