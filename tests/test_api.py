@@ -707,3 +707,93 @@ def test_api_rag_query_supports_keyword_rewriter(tmp_path):
     assert payload["query_variants"][0] == "What do the platforms preserve?"
     assert len(payload["query_variants"]) >= 2
     assert payload["retrieved"][0]["chunk"]["chunk_id"] == "chunk_ingest"
+
+
+def test_index_cache_reloads_when_index_file_changes(tmp_path):
+    import time as time_module
+
+    from adip.api.cache import IndexCache
+
+    index_path = tmp_path / "index"
+    save_test_index(index_path)
+    cache = IndexCache(max_entries=2)
+
+    first = cache.get(index_path)
+    second = cache.get(index_path)
+    assert first is second
+    assert cache.stats()["hits"] == 1
+
+    time_module.sleep(0.01)
+    save_test_index(index_path)  # rebuild -> new mtime
+    third = cache.get(index_path)
+    assert third is not first
+    assert cache.stats()["misses"] == 2
+
+
+def test_query_cache_lru_eviction_and_stats():
+    from adip.api.cache import QueryCache
+
+    cache = QueryCache(max_entries=2)
+    cache.put("a", {"answer": 1})
+    cache.put("b", {"answer": 2})
+    assert cache.get("a") == {"answer": 1}  # refresh 'a'
+    cache.put("c", {"answer": 3})  # evicts 'b'
+
+    assert cache.get("b") is None
+    assert cache.get("c") == {"answer": 3}
+    stats = cache.stats()
+    assert stats["entries"] == 2
+    assert stats["hits"] == 2 and stats["misses"] == 1
+
+
+def test_api_rag_query_uses_cache_on_repeat_and_invalidates_on_rebuild(tmp_path):
+    import time as time_module
+
+    index_path = tmp_path / "index"
+    save_test_index(index_path)
+    client = TestClient(create_app())
+    payload = {
+        "index_path": str(index_path),
+        "question": "What does the platform preserve?",
+        "top_k": 1,
+    }
+
+    first = client.post("/rag/query", json=payload).json()
+    second = client.post("/rag/query", json=payload).json()
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert second["answer"] == first["answer"]
+
+    time_module.sleep(0.01)
+    save_test_index(index_path)  # rebuild invalidates via mtime key
+    third = client.post("/rag/query", json=payload).json()
+    assert third["cached"] is False
+
+
+def test_api_rag_query_cache_can_be_bypassed(tmp_path):
+    index_path = tmp_path / "index"
+    save_test_index(index_path)
+    client = TestClient(create_app())
+    payload = {
+        "index_path": str(index_path),
+        "question": "What does the platform preserve?",
+        "top_k": 1,
+        "use_cache": False,
+    }
+
+    first = client.post("/rag/query", json=payload).json()
+    second = client.post("/rag/query", json=payload).json()
+    assert first["cached"] is False
+    assert second["cached"] is False
+
+
+def test_cache_monitoring_endpoint_reports_stats():
+    client = TestClient(create_app())
+
+    response = client.get("/monitoring/cache")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "index_cache" in payload and "query_cache" in payload
+    assert payload["query_cache"]["max_entries"] >= 1
+    assert "Redis" in payload["scope"]
