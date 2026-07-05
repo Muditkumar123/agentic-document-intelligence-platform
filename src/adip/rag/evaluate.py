@@ -10,6 +10,12 @@ from typing import Any, Sequence
 
 from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
 from adip.rag.retriever import load_index
+from adip.rag.rewrite import (
+    DEFAULT_REWRITE_COUNT,
+    QueryRewriter,
+    retrieve_with_rewrites,
+    rewrite_question,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["none", "lexical", "cross_encoder"],
         default="none",
         help="Optional second-stage reranker.",
+    )
+    parser.add_argument(
+        "--rewriter",
+        choices=["none", "keywords"],
+        default="none",
+        help="Deterministic query rewriting before retrieval (LLM mode is CLI-only in rag.query).",
     )
     parser.add_argument(
         "--rerank-weight",
@@ -94,6 +106,9 @@ def evaluate(
     cross_encoder_device: str | None = None,
     cross_encoder_batch_size: int = 16,
     cross_encoder_local_files_only: bool = True,
+    rewriter: str = "none",
+    llm_rewriter: QueryRewriter | None = None,
+    rewrite_count: int = DEFAULT_REWRITE_COUNT,
 ) -> dict[str, Any]:
     index = load_index(index_path)
     golden = read_golden(golden_path)
@@ -110,7 +125,13 @@ def evaluate(
         if not row.get("answerable", True):
             continue
         query_start = time.perf_counter()
-        candidates = index.search(row["question"], top_k=resolved_candidate_k)
+        variants = rewrite_question(
+            row["question"],
+            rewriter=rewriter,
+            llm_rewriter=llm_rewriter,
+            rewrite_count=rewrite_count,
+        )
+        candidates = retrieve_with_rewrites(index, variants, top_k=resolved_candidate_k)
         retrieved = rerank_results(
             row["question"],
             candidates,
@@ -162,6 +183,7 @@ def evaluate(
         "top_k": top_k,
         "candidate_k": resolved_candidate_k,
         "reranker": reranker,
+        "rewriter": rewriter,
         "rerank_weight": rerank_weight,
         "cross_encoder_model": cross_encoder_model if reranker == "cross_encoder" else None,
         "cross_encoder_batch_size": cross_encoder_batch_size if reranker == "cross_encoder" else None,
@@ -224,6 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         top_k=args.top_k,
         candidate_k=args.candidate_k,
         reranker=args.reranker,
+        rewriter=args.rewriter,
         rerank_weight=args.rerank_weight,
         cross_encoder_model=args.cross_encoder_model,
         cross_encoder_device=args.cross_encoder_device,

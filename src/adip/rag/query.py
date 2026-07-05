@@ -10,6 +10,12 @@ from typing import Sequence
 from adip.rag.answer import build_extractive_answer
 from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
 from adip.rag.retriever import load_index
+from adip.rag.rewrite import (
+    DEFAULT_REWRITE_COUNT,
+    LLMQueryRewriter,
+    retrieve_with_rewrites,
+    rewrite_question,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +49,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="none",
         help="Optional second-stage reranker.",
     )
+    parser.add_argument(
+        "--rewriter",
+        choices=["none", "keywords", "llm"],
+        default="none",
+        help="Query rewriting before retrieval: deterministic keyword variants or LLM paraphrases.",
+    )
+    parser.add_argument("--rewrite-count", type=int, default=DEFAULT_REWRITE_COUNT)
+    parser.add_argument("--rewrite-model-name", default=None)
+    parser.add_argument("--rewrite-endpoint-url", default=None)
+    parser.add_argument("--rewrite-api-key", default=None)
     parser.add_argument("--rerank-weight", type=float, default=0.25)
     parser.add_argument("--cross-encoder-model", default=DEFAULT_CROSS_ENCODER_MODEL)
     parser.add_argument("--cross-encoder-device", default=None)
@@ -60,7 +76,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     index = load_index(args.index)
     candidate_k = resolve_candidate_k(args.top_k, args.candidate_k, args.reranker)
-    candidates = index.search(args.question, top_k=candidate_k)
+    llm_rewriter = None
+    if args.rewriter == "llm":
+        llm_rewriter = LLMQueryRewriter(
+            model_name=args.rewrite_model_name,
+            endpoint_url=args.rewrite_endpoint_url,
+            api_key=args.rewrite_api_key,
+            rewrite_count=args.rewrite_count,
+        )
+    variants = rewrite_question(
+        args.question,
+        rewriter=args.rewriter,
+        llm_rewriter=llm_rewriter,
+        rewrite_count=args.rewrite_count,
+    )
+    candidates = retrieve_with_rewrites(index, variants, top_k=candidate_k)
     retrieved = rerank_results(
         args.question,
         candidates,
@@ -79,6 +109,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "candidate_k": candidate_k,
         "cross_encoder_model": args.cross_encoder_model if args.reranker == "cross_encoder" else None,
         "reranker": args.reranker,
+        "rewriter": args.rewriter,
+        "query_variants": variants,
         "retrieved": [item.to_dict() for item in retrieved],
     }
 

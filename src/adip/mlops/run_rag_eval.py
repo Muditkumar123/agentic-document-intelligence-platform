@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--candidate-k", type=int, default=None)
     parser.add_argument("--reranker", choices=["none", "lexical", "cross_encoder"], default="none")
+    parser.add_argument("--rewriter", choices=["none", "keywords"], default="none")
     parser.add_argument("--rerank-weight", type=float, default=0.25)
     parser.add_argument("--cross-encoder-model", default=DEFAULT_CROSS_ENCODER_MODEL)
     parser.add_argument("--cross-encoder-device", default=None)
@@ -72,6 +73,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "top_k": args.top_k,
                 "candidate_k": args.candidate_k or args.top_k,
                 "reranker": args.reranker,
+                "rewriter": args.rewriter,
                 "rerank_weight": args.rerank_weight,
                 "cross_encoder_model": args.cross_encoder_model,
                 "cross_encoder_device": args.cross_encoder_device or "",
@@ -97,6 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             top_k=args.top_k,
             candidate_k=args.candidate_k,
             reranker=args.reranker,
+            rewriter=args.rewriter,
             rerank_weight=args.rerank_weight,
             cross_encoder_model=args.cross_encoder_model,
             cross_encoder_device=args.cross_encoder_device,
