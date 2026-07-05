@@ -1,253 +1,903 @@
 {
-  "avg_query_latency_ms": 0.6447089836001396,
+  "avg_query_latency_ms": 0.6090873119203334,
   "backend": "tfidf",
-  "candidate_k": 3,
-  "chunk_count": 10,
-  "elapsed_ms": 9.83175728470087,
+  "candidate_k": 5,
+  "chunk_count": 19,
+  "cross_encoder_batch_size": null,
+  "cross_encoder_model": null,
+  "elapsed_ms": 29.104806017130613,
   "embedding_model": null,
-  "golden_path": "data/reference/golden_qa.jsonl",
+  "golden_path": "data/eval/golden_qa.jsonl",
   "hit_rate_at_k": 1.0,
+  "hit_rate_by_category": {
+    "academic": 1.0,
+    "finance": 1.0,
+    "legal": 1.0,
+    "security": 1.0,
+    "technical": 1.0
+  },
   "index_metadata": {
     "matrix_shape": [
-      10,
-      731
+      19,
+      2015
     ],
     "ngram_max": 2,
     "retrieval_backend": "tfidf"
   },
   "index_path": "data/processed/vector_index",
-  "index_size_bytes": 53389,
-  "index_vocabulary_size": 731,
-  "mrr": 0.7333333333333333,
-  "question_count": 15,
+  "index_size_bytes": 139429,
+  "index_vocabulary_size": 2015,
+  "mrr": 1.0,
+  "mrr_by_category": {
+    "academic": 1.0,
+    "finance": 1.0,
+    "legal": 1.0,
+    "security": 1.0,
+    "technical": 1.0
+  },
+  "question_count": 47,
   "rerank_weight": 0.25,
   "reranker": "none",
   "results": [
     {
+      "category": "legal",
       "hit": true,
-      "question": "What does the platform do with documents?",
+      "question": "What are the principles for processing personal data under the GDPR?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8",
-        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c"
       ],
       "retrieved_citations": [
-        "sample_research_note.md p.1 chunk doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8",
-        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c"
       ]
     },
     {
+      "category": "legal",
       "hit": true,
-      "question": "Which metrics evaluate retrieval quality?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
-        "doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ],
-      "retrieved_citations": [
-        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
-        "academic_rag_evaluation.md p.1 chunk doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "What does mean reciprocal rank reward?",
+      "question": "Which GDPR principle limits how long personal data may be kept?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "doc_787c38c92bfb402c_p0001_c0000_bdb79a4518"
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423"
       ],
       "retrieved_citations": [
-        "academic_rag_evaluation.md p.1 chunk doc_f48f43fcaf891da7_p0001_c0000_1891de385b",
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "hard_negative_llmops_terms.md p.1 chunk doc_787c38c92bfb402c_p0001_c0000_bdb79a4518"
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423"
       ]
     },
     {
+      "category": "legal",
       "hit": true,
-      "question": "Which nodes are in the agent workflow?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6"
-      ],
-      "retrieved_citations": [
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "What does each AgentOps trace event store?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
-      ],
-      "retrieved_citations": [
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "sample_research_note.md p.1 chunk doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "What does the finance domain preset emphasize?",
+      "question": "Under the GDPR, what is the right to be forgotten?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
-        "doc_32fb9580ca7ac581_p0001_c0000_850697633f",
-        "doc_f48f43fcaf891da7_p0001_c0000_1891de385b"
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
       ],
       "retrieved_citations": [
-        "finance_risk_report.md p.1 chunk doc_33bf8b2c684cacd8_p0001_c0000_a04dd96ab6",
-        "legal_policy_brief.md p.1 chunk doc_32fb9580ca7ac581_p0001_c0000_850697633f",
-        "academic_rag_evaluation.md p.1 chunk doc_f48f43fcaf891da7_p0001_c0000_1891de385b"
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
       ]
     },
     {
+      "category": "legal",
       "hit": true,
-      "question": "When should the legal verifier mark an answer insufficient?",
+      "question": "On what grounds can a data subject demand erasure of their personal data?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_32fb9580ca7ac581_p0001_c0000_850697633f",
-        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423"
       ],
       "retrieved_citations": [
-        "legal_policy_brief.md p.1 chunk doc_32fb9580ca7ac581_p0001_c0000_850697633f",
-        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423"
       ]
     },
     {
+      "category": "legal",
       "hit": true,
-      "question": "What does every generation run record in LLMOps?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
-      ],
-      "retrieved_citations": [
-        "hard_negative_llmops_terms.md p.1 chunk doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "Why is structured verifier output used?",
+      "question": "When must a controller report a personal data breach to the supervisory authority?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
-        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c"
       ],
       "retrieved_citations": [
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
-        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "sec_form_10k.md p.1 chunk doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c"
       ]
     },
     {
+      "category": "legal",
       "hit": true,
-      "question": "Which model is the default local writer?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ],
-      "retrieved_citations": [
-        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "Which model is used as a reasoning specialist?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ],
-      "retrieved_citations": [
-        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "Which exact fields should an AgentOps trace event store for auditability?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ],
-      "retrieved_citations": [
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086",
-        "agentops_trace_runbook.md p.1 chunk doc_d4414ebf25a18ad7_p0001_c0000_cdd4b4d1f7",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "Which precise metadata fields does every LLMOps generation run record?",
-      "rank": 2,
-      "retrieved_chunk_ids": [
-        "doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
-        "doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
-      ],
-      "retrieved_citations": [
-        "hard_negative_llmops_terms.md p.1 chunk doc_787c38c92bfb402c_p0001_c0000_bdb79a4518",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd",
-        "hard_negative_agentops_terms.md p.1 chunk doc_05241e5d30896d5e_p0001_c0000_a0e6e5b086"
-      ]
-    },
-    {
-      "hit": true,
-      "question": "Which local model should write normal document answers?",
+      "question": "How quickly must an organisation notify regulators after discovering a data breach?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423"
       ],
       "retrieved_citations": [
-        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "sample_research_note.md p.1 chunk doc_9898ddd30039ebbe_p0001_c0000_0008ede8b8"
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423"
       ]
     },
     {
+      "category": "legal",
       "hit": true,
-      "question": "Which local model should handle planning and evidence verification?",
+      "question": "Which category of AI systems does the EU AI Act prohibit outright?",
       "rank": 1,
       "retrieved_chunk_ids": [
-        "doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
       ],
       "retrieved_citations": [
-        "technical_deployment_runbook.md p.1 chunk doc_f9405641b2867053_p0001_c0000_9e3283301b",
-        "hard_negative_model_roles.md p.1 chunk doc_87c6cb19ce4424c0_p0001_c0000_1c0152b59d",
-        "llmops_prompt_registry.md p.1 chunk doc_5999e1d5d3939cc5_p0001_c0000_2054c588bd"
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ]
+    },
+    {
+      "category": "legal",
+      "hit": true,
+      "question": "What transparency obligation does the EU AI Act place on chatbots and deepfakes?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ],
+      "retrieved_citations": [
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ]
+    },
+    {
+      "category": "legal",
+      "hit": true,
+      "question": "What compute threshold triggers systemic-risk rules for general-purpose AI models in the EU AI Act?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ],
+      "retrieved_citations": [
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ]
+    },
+    {
+      "category": "legal",
+      "hit": true,
+      "question": "What obligations does the EU AI Act impose on high-risk AI systems?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "What architecture did 'Attention Is All You Need' propose?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ],
+      "retrieved_citations": [
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "Which model dispenses with recurrence and convolutions entirely?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ],
+      "retrieved_citations": [
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "What BLEU score did the Transformer reach on WMT 2014 English-to-French translation?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ],
+      "retrieved_citations": [
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "What does BERT stand for and how is it pre-trained?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb"
+      ],
+      "retrieved_citations": [
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "Which language model pushed the GLUE score to 80.5%?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d"
+      ],
+      "retrieved_citations": [
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "How does residual learning ease the training of very deep networks?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222"
+      ],
+      "retrieved_citations": [
+        "resnet.md p.1 chunk doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "How many layers deep was the ResNet evaluated on ImageNet?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ],
+      "retrieved_citations": [
+        "resnet.md p.1 chunk doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "Which optimizer is based on adaptive estimates of lower-order moments?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "resnet.md p.1 chunk doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "academic",
+      "hit": true,
+      "question": "Which optimization method is invariant to diagonal rescaling of the gradients?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97"
+      ],
+      "retrieved_citations": [
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "In an RFC, what does the keyword MUST mean?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ],
+      "retrieved_citations": [
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What requirement level does the word RECOMMENDED correspond to in RFC 2119?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ],
+      "retrieved_citations": [
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "Which HTTP request methods are considered safe?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What does it mean for an HTTP method to be idempotent, and is POST idempotent?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97"
+      ],
+      "retrieved_citations": [
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What does the TLS protocol protect against for applications communicating over the Internet?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423"
+      ],
+      "retrieved_citations": [
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "How does TLS 1.3 guard against protocol version downgrade attacks?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ],
+      "retrieved_citations": [
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What is the maximum length of a full domain name in the DNS?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222"
+      ],
+      "retrieved_citations": [
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What is the maximum size of a single DNS label?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053"
+      ],
+      "retrieved_citations": [
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What is the stated goal of domain names according to RFC 1035?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ],
+      "retrieved_citations": [
+        "rfc1035_dns.md p.1 chunk doc_670139d8dbeb859b_p0001_c0000_6aa075d222",
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "What are the six core functions of the NIST Cybersecurity Framework 2.0?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c"
+      ],
+      "retrieved_citations": [
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "resnet.md p.1 chunk doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "Which function was newly added in NIST CSF 2.0?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "Which NIST cybersecurity function covers restoring operations after an incident?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37"
+      ],
+      "retrieved_citations": [
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "sec_form_10k.md p.1 chunk doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "What are the four core functions of the NIST AI Risk Management Framework?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37"
+      ],
+      "retrieved_citations": [
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "resnet.md p.1 chunk doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb",
+        "sec_form_10k.md p.1 chunk doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "In the NIST AI RMF, which function recognizes context and identifies related risks?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "bert.md p.1 chunk doc_6a283c673b9baf8b_p0001_c0000_8be9ee113f",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "Which NIST AI RMF function cultivates a culture of risk management?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "sec_form_10k.md p.1 chunk doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "How does NIST SP 800-207 define zero trust?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ],
+      "retrieved_citations": [
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "What assumption does zero trust make about a user's network location?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d"
+      ],
+      "retrieved_citations": [
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "sec_diversification.md p.1 chunk doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d"
+      ]
+    },
+    {
+      "category": "finance",
+      "hit": true,
+      "question": "What is the SEC Form 10-K?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423"
+      ],
+      "retrieved_citations": [
+        "sec_form_10k.md p.1 chunk doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "sec_mutual_funds.md p.1 chunk doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "sec_diversification.md p.1 chunk doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423"
+      ]
+    },
+    {
+      "category": "finance",
+      "hit": true,
+      "question": "What sections does a Form 10-K typically include?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ],
+      "retrieved_citations": [
+        "sec_form_10k.md p.1 chunk doc_2a24a77f99a230e7_p0001_c0000_84ae7b4b37",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ]
+    },
+    {
+      "category": "finance",
+      "hit": true,
+      "question": "Which investment strategy is summed up as not putting all your eggs in one basket?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ],
+      "retrieved_citations": [
+        "sec_diversification.md p.1 chunk doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "sec_mutual_funds.md p.1 chunk doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2"
+      ]
+    },
+    {
+      "category": "finance",
+      "hit": true,
+      "question": "How does diversification reduce investment risk?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97"
+      ],
+      "retrieved_citations": [
+        "sec_diversification.md p.1 chunk doc_13440b15c793d797_p0001_c0000_b5f0b07466",
+        "eu_ai_act_risk_tiers.md p.1 chunk doc_cd33a4d440060589_p0001_c0000_0901c27423",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97"
+      ]
+    },
+    {
+      "category": "finance",
+      "hit": true,
+      "question": "What is a mutual fund?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_df760f57e2140fba_p0001_c0000_f032b9beb7"
+      ],
+      "retrieved_citations": [
+        "sec_mutual_funds.md p.1 chunk doc_df760f57e2140fba_p0001_c0000_f032b9beb7"
+      ]
+    },
+    {
+      "category": "finance",
+      "hit": true,
+      "question": "What does a single share in a mutual fund represent?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_f4eca9056fefbc30_p0001_c0000_a9335b593d"
+      ],
+      "retrieved_citations": [
+        "sec_mutual_funds.md p.1 chunk doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "transformer_attention.md p.1 chunk doc_f4eca9056fefbc30_p0001_c0000_a9335b593d"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "Which document defines requirement levels using the words MUST, SHOULD, and MAY?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ],
+      "retrieved_citations": [
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85"
+      ]
+    },
+    {
+      "category": "legal",
+      "hit": true,
+      "question": "What does the GDPR's 72-hour rule require?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ],
+      "retrieved_citations": [
+        "gdpr_art33_breach.md p.1 chunk doc_92735bf972431ae6_p0001_c0000_b5a630b15f",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "adam_optimizer.md p.1 chunk doc_0330530e64b96e9a_p0001_c0000_d842b5727c",
+        "gdpr_art17_erasure.md p.1 chunk doc_91bb20230edb09f2_p0001_c0000_e79d8ccdc5",
+        "gdpr_art5_principles.md p.1 chunk doc_11c0ded4669afd0e_p0001_c0000_52d1f40298"
+      ]
+    },
+    {
+      "category": "security",
+      "hit": true,
+      "question": "Which NIST framework function restores assets impaired by a cybersecurity incident?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb"
+      ],
+      "retrieved_citations": [
+        "nist_csf_functions.md p.1 chunk doc_852b92982aa341f2_p0001_c0000_e4b637c4a2",
+        "nist_ai_rmf_functions.md p.1 chunk doc_c90e904ac0b56740_p0001_c0000_dec906eb97",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30",
+        "sec_mutual_funds.md p.1 chunk doc_df760f57e2140fba_p0001_c0000_f032b9beb7",
+        "resnet.md p.1 chunk doc_b6e935171fe29fdd_p0001_c0000_14bc8b30cb"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "Which class of HTTP status codes means the server failed to fulfill a valid request?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ],
+      "retrieved_citations": [
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1",
+        "rfc2119_keywords.md p.1 chunk doc_3b1a2f8352f12650_p0001_c0000_2efc1e8053",
+        "nist_zero_trust.md p.1 chunk doc_8b2cfc564fe33f87_p0001_c0000_9b9e05ae30"
+      ]
+    },
+    {
+      "category": "technical",
+      "hit": true,
+      "question": "What does a 3xx redirection status code tell the client?",
+      "rank": 1,
+      "retrieved_chunk_ids": [
+        "doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1"
+      ],
+      "retrieved_citations": [
+        "rfc9110_status_codes.md p.1 chunk doc_c743f0ca16d45fbf_p0001_c0000_cbd30cde85",
+        "rfc9110_http_methods.md p.1 chunk doc_68aff7ff6f10e760_p0001_c0000_92167d03cb",
+        "rfc8446_tls13.md p.1 chunk doc_d9b4f4fe06599327_p0001_c0000_7391dcb6c1"
       ]
     }
   ],
-  "top_k": 3
+  "rewriter": "none",
+  "top_k": 5
 }

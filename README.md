@@ -84,6 +84,8 @@ Supported input types:
 - `.md`
 - `.pdf` through the system `pdftotext` command
 
+An optional **table-aware parser** (`pip install -e ".[tables]"`, then `--parser unstructured`) partitions documents with unstructured.io and serializes every table row with its column headers attached (`Class: Server Error; Range: 5xx; ...`), so table cells stay retrievable even when chunk boundaries would separate a row from its header. Markdown/HTML tables work out of the box; PDF table structure additionally needs unstructured's `hi_res` strategy (heavy vision models — documented upgrade path, not bundled).
+
 ## Current Second Step: Baseline RAG
 
 The second implemented layer builds a local retrieval index over the chunk JSONL file and returns cited evidence for a question.
@@ -253,7 +255,7 @@ An optional **LLM-as-judge** pass (`--judge-model-name ... --judge-endpoint-url 
 
 An optional **RAGAS** pass (`pip install -e ".[ragas]"`, then `--ragas-model-name ... --ragas-endpoint-url ...`) adds the industry-standard metrics — faithfulness, answer relevancy, context precision, context recall — behind the same report shape, including three-way faithfulness agreement (RAGAS vs lexical proxy vs judge). The context metrics give graded retrieval evaluation where hit@k/MRR are saturated. See [docs/LLMOPS.md](docs/LLMOPS.md#standardized-ragas-metrics-optional).
 
-The latest report is surfaced as the dashboard's **Answer Quality** tiles and `GET /monitoring/generation-eval`. The CI quality gate runs this over a **corpus of real public documents** (`data/eval/` — GDPR/EU AI Act, IETF RFCs, NIST, SEC, arXiv, 18 docs across 5 categories, 45 golden questions) so the numbers are not overfit to project-authored text. On that corpus the extractive baseline scores about **0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage** (retrieval is saturated at 1.0 because the domains are lexically distinct, so faithfulness is the discriminating metric). See [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md).
+The latest report is surfaced as the dashboard's **Answer Quality** tiles and `GET /monitoring/generation-eval`. The CI quality gate runs this over a **corpus of real public documents** (`data/eval/` — GDPR/EU AI Act, IETF RFCs, NIST, SEC, arXiv, 19 docs across 5 categories, 47 golden questions) so the numbers are not overfit to project-authored text. On that corpus the extractive baseline scores about **0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage** (retrieval is saturated at 1.0 because the domains are lexically distinct, so faithfulness is the discriminating metric). See [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md).
 
 ## Continuous Integration
 
