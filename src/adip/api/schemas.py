@@ -17,6 +17,7 @@ class RagQueryRequest(BaseModel):
     top_k: int = Field(default=3, ge=1)
     candidate_k: int | None = Field(default=None, ge=1)
     reranker: Literal["none", "lexical", "cross_encoder"] = "none"
+    rewriter: Literal["none", "keywords"] = "none"
     rerank_weight: float = Field(default=0.25, ge=0)
     cross_encoder_model: str = DEFAULT_CROSS_ENCODER_MODEL
     cross_encoder_device: str | None = None

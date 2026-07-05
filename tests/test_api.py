@@ -684,3 +684,26 @@ def test_dashboard_serves_new_ui_sections():
     assert "ragCompareBackends" in body
     assert 'data-mode="eval"' in body
     assert "compareView" in body
+
+
+def test_api_rag_query_supports_keyword_rewriter(tmp_path):
+    index_path = tmp_path / "index"
+    save_test_index(index_path)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/rag/query",
+        json={
+            "index_path": str(index_path),
+            "question": "What do the platforms preserve?",
+            "top_k": 1,
+            "rewriter": "keywords",
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["rewriter"] == "keywords"
+    assert payload["query_variants"][0] == "What do the platforms preserve?"
+    assert len(payload["query_variants"]) >= 2
+    assert payload["retrieved"][0]["chunk"]["chunk_id"] == "chunk_ingest"

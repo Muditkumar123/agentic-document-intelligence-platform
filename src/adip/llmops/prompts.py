@@ -17,6 +17,7 @@ PROMPT_REGISTRY = {
     "plan": "plan_v1.txt",
     "verify": "verify_v1.txt",
     "judge": "judge_v1.txt",
+    "rewrite": "rewrite_v1.txt",
 }
 
 
