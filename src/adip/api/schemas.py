@@ -23,6 +23,7 @@ class RagQueryRequest(BaseModel):
     cross_encoder_device: str | None = None
     cross_encoder_batch_size: int = Field(default=16, ge=1)
     allow_reranker_download: bool = False
+    use_cache: bool = True
 
 
 class AgentRunRequest(BaseModel):

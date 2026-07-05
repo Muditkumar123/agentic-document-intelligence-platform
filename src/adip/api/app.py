@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from adip.api.cache import cache_stats
 from adip.api.schemas import (
     AgentRunRequest,
     ModelCheckRequest,
@@ -72,6 +73,10 @@ def create_app():
     @app.get("/monitoring/offline-eval")
     def offline_eval() -> dict[str, Any]:
         return offline_eval_snapshot()
+
+    @app.get("/monitoring/cache")
+    def cache_monitoring() -> dict[str, Any]:
+        return cache_stats()
 
     @app.get("/model-profiles")
     def model_profiles() -> dict[str, Any]:

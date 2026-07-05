@@ -160,6 +160,14 @@ curl http://127.0.0.1:8010/monitoring/retrieval-benchmark
 
 This returns the current retrieval benchmark headline metrics for the dashboard.
 
+## Cache Monitoring
+
+```bash
+curl http://127.0.0.1:8010/monitoring/cache
+```
+
+Reports hit/miss statistics for the two in-process caches: the **index cache** (loaded indexes keyed by pickle mtime, so a rebuild invalidates naturally — no explicit invalidation hooks to forget) and the **query cache** (bounded LRU over full `/rag/query` responses, keyed by request payload + index mtime). Cached responses carry `"cached": true` and skip retrieval entirely (~30x faster on repeats); pass `"use_cache": false` in the query request to bypass. This is deliberately single-process (works on the free hosting tier, vanishes on restart); Redis is the documented upgrade path for multi-instance deployments.
+
 ## Offline Evaluation Snapshot
 
 ```bash

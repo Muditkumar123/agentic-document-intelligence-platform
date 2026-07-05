@@ -11,6 +11,7 @@ from typing import Any
 
 from adip import __version__
 from adip.agents.runner import run_agent_from_index_path
+from adip.api.cache import INDEX_CACHE, QUERY_CACHE
 from adip.api.schemas import (
     AgentRunRequest,
     ModelCheckRequest,
@@ -292,7 +293,20 @@ def get_mlops_run(
 
 def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
     started = time.perf_counter()
-    index = load_index(request.index_path)
+
+    cache_key = None
+    if request.use_cache:
+        cache_key = QUERY_CACHE.key_for(
+            request.model_dump(mode="json", exclude={"use_cache"}), request.index_path
+        )
+        cached = QUERY_CACHE.get(cache_key)
+        if cached is not None:
+            payload = dict(cached)
+            payload["cached"] = True
+            payload["latency_ms"] = (time.perf_counter() - started) * 1000
+            return payload
+
+    index = INDEX_CACHE.get(request.index_path) if request.use_cache else load_index(request.index_path)
     candidate_k = resolve_candidate_k(request.top_k, request.candidate_k, request.reranker)
 
     variants = rewrite_question(request.question, rewriter=request.rewriter)
@@ -317,7 +331,7 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
     retrieved_records = [item.to_dict() for item in retrieved]
     latency_ms = (time.perf_counter() - started) * 1000
 
-    return {
+    payload = {
         "question": request.question,
         "answer": answer,
         "backend": index.backend,
@@ -330,9 +344,13 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
         "query_variants": variants,
         "cross_encoder_model": request.cross_encoder_model if request.reranker == "cross_encoder" else None,
         "latency_ms": latency_ms,
+        "cached": False,
         "quality": quality_summary(answer, retrieved_records),
         "retrieved": retrieved_records,
     }
+    if cache_key is not None:
+        QUERY_CACHE.put(cache_key, payload)
+    return payload
 
 
 def run_agent_workflow(request: AgentRunRequest) -> dict[str, Any]:
