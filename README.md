@@ -383,6 +383,7 @@ Recommended dashboard setup for readable local LLM answers:
 ## Project Notes
 
 - [docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md): current sample corpus, golden QA set, and benchmark meaning.
+- [docs/FINETUNING.md](docs/FINETUNING.md): the LoRA fine-tuning experiment — chunk-category classifier, document-level splits, tracked base-vs-adapted comparison (LoRA 0.625 accuracy vs 0.500 baselines, <1% trainable params).
 - [docs/FIXES.md](docs/FIXES.md): problems found in the LLM answer path and how they were fixed, with regression tests.
 
 ## Planned Stack
