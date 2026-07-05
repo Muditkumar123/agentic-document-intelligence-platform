@@ -38,6 +38,12 @@ agents = [
 tables = [
   "unstructured[md,pdf]>=0.16",
 ]
+finetune = [
+  "accelerate",
+  "peft>=0.10",
+  "torch",
+  "transformers>=4.51.0",
+]
 ragas = [
   "ragas>=0.4,<0.5",
   "langchain-core>=0.3,<0.4",

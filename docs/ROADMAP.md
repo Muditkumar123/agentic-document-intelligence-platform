@@ -148,15 +148,14 @@ Deliverable:
 
 Goal: demonstrate LoRA or QLoRA without overbuilding.
 
-- Create a small supervised dataset for one task.
-- Suggested task: classify document chunks into claim, evidence, risk, method, result, limitation, or background.
-- Fine-tune using PEFT.
-- Compare base model vs adapted model.
-- Track all runs in MLflow.
+- Create a small supervised dataset for one task. Status: done — chunk-category classification with free, honest labels from `data/eval/SOURCES.md` (46 train / 16 eval, document-level split so no document leaks across sides).
+- Fine-tune using PEFT. Status: done — LoRA (r=8, alpha=16) on distilroberta-base via the `[finetune]` extra, ~1s on an A100.
+- Compare base model vs adapted model. Status: done — LoRA 0.625 accuracy / 0.467 macro-F1 vs 0.500/0.335 TF-IDF+logreg and 0.500/0.300 frozen-base head; full analysis in FINETUNING.md.
+- Track all runs in MLflow. Status: done — `python -m adip.mlops.run_lora_experiment` logs params, per-approach metrics, and the report artifact through the standard run tracking.
 
 Deliverable:
 
-- A concise model comparison report with metrics and artifacts.
+- A concise model comparison report with metrics and artifacts. Status: done — see [FINETUNING.md](FINETUNING.md).
 
 ## Phase 8: Monitoring and Evaluation Dashboard
 
