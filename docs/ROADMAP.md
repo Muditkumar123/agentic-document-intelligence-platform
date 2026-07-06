@@ -164,7 +164,7 @@ Goal: make quality visible.
 - Add retrieval evaluation dashboard. Status: started with FastAPI-served dashboard.
 - Add answer faithfulness checks.
 - Add citation accuracy checks.
-- Add text drift report for incoming documents and queries.
+- Add text drift report for incoming documents and queries. Status: done — every query is logged (best-effort, never blocking), and `run_drift_report` / `GET /monitoring/drift` grade vocabulary OOV rate, question-length shift, and retrieval-score PSI against a baseline built from the golden questions; PSI declares itself `insufficient_data` under 20 queries instead of alerting on noise.
 - Add run history. Status: done for AgentOps traces and MLOps local run records.
 
 Deliverable:

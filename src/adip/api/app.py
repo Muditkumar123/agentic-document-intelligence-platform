@@ -14,6 +14,7 @@ from adip.api.schemas import (
 from adip.api.services import (
     check_model_connection,
     delete_raw_document,
+    drift_summary,
     generation_eval_summary,
     get_agent_trace,
     get_mlops_run,
@@ -77,6 +78,10 @@ def create_app():
     @app.get("/monitoring/cache")
     def cache_monitoring() -> dict[str, Any]:
         return cache_stats()
+
+    @app.get("/monitoring/drift")
+    def drift_monitoring() -> dict[str, Any]:
+        return drift_summary()
 
     @app.get("/model-profiles")
     def model_profiles() -> dict[str, Any]:

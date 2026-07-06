@@ -18,6 +18,11 @@ if [ ! -d data/processed/vector_index ]; then
     --report-output data/monitoring/generation_eval_report.json
 fi
 
+if [ ! -f data/monitoring/drift_baseline.json ]; then
+  python -m adip.mlops.run_drift_report --rebuild-baseline \
+    --index data/processed/vector_index --golden data/eval/golden_qa.jsonl
+fi
+
 # Per-backend indexes for the dashboard's retrieval comparison (cheap on the demo corpus).
 if [ ! -d data/processed/vector_index_dense ]; then
   python -m adip.rag.index --chunks data/processed/chunks.jsonl \

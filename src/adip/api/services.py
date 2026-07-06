@@ -24,6 +24,7 @@ from adip.ingestion.pipeline import ingest_path
 from adip.llmops.evaluation import evaluate_generation
 from adip.llmops.models import GenerationRequest, OpenAICompatibleChatAdapter
 from adip.llmops.pipeline import build_evidence
+from adip.monitoring.drift import append_query_record, drift_report, load_baseline, read_query_log
 from adip.rag.answer import build_extractive_answer
 from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.rerank import rerank_results, resolve_candidate_k
@@ -304,6 +305,11 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
             payload = dict(cached)
             payload["cached"] = True
             payload["latency_ms"] = (time.perf_counter() - started) * 1000
+            append_query_record(
+                request.question,
+                top_score=payload["retrieved"][0]["score"] if payload.get("retrieved") else 0.0,
+                extra={"cached": True, "backend": payload.get("backend")},
+            )
             return payload
 
     index = INDEX_CACHE.get(request.index_path) if request.use_cache else load_index(request.index_path)
@@ -350,7 +356,27 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
     }
     if cache_key is not None:
         QUERY_CACHE.put(cache_key, payload)
+    append_query_record(
+        request.question,
+        top_score=retrieved_records[0]["score"] if retrieved_records else 0.0,
+        extra={"cached": False, "backend": index.backend},
+    )
     return payload
+
+
+def drift_summary(
+    baseline_path: Path | None = None,
+    query_log_path: Path | None = None,
+) -> dict[str, Any]:
+    """Current drift report computed from the query log against the baseline."""
+    baseline = load_baseline(baseline_path)
+    if baseline is None:
+        return {
+            "available": False,
+            "reason": "No drift baseline; run python -m adip.mlops.run_drift_report --rebuild-baseline",
+        }
+    recent = read_query_log(query_log_path)
+    return drift_report(baseline, recent)
 
 
 def run_agent_workflow(request: AgentRunRequest) -> dict[str, Any]:
