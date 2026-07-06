@@ -239,6 +239,7 @@ main {
 
 .control-panel,
 .result-panel {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -253,14 +254,16 @@ main {
 
 .mode-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border-bottom: 1px solid var(--line);
   background: var(--surface-2);
 }
 
 .mode-tab {
   min-height: 50px;
+  padding: 0 2px;
   border: 0;
+  font-size: 0.74rem;
   border-right: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
@@ -291,8 +294,11 @@ main {
   padding: 18px;
 }
 
+/* Utility class toggled from JS. !important so it beats any component display
+   rule declared later in the file (the cold-start banner's display: flex used
+   to out-cascade it, leaving the banner permanently visible). */
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 label {
@@ -864,6 +870,10 @@ pre {
   margin-top: 22px;
 }
 
+.two-column > div {
+  min-width: 0;
+}
+
 .citation-list,
 .trace-list,
 .history-list {
@@ -910,6 +920,16 @@ pre {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+/* Citation/trace/history card text contains unbreakable tokens (chunk ids like
+   "rfc9110_status_codes.md::chunk-0007"); without this they overflow their grid
+   track and paint under the neighboring column. */
+.item-title,
+.item-meta,
+.trace-step-details,
+.compare-item {
+  overflow-wrap: anywhere;
 }
 
 .raw-block {
@@ -1207,7 +1227,9 @@ pre {
 
 .compare-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  /* Always one column per backend: auto-fit used to drop to 2+1 with an empty
+     cell on mid-width panels. Collapses to a single column below 1240px. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-top: 14px;
 }
@@ -1353,4 +1375,15 @@ pre {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* --- Responsive overrides ----------------------------------------------------
+   Kept at the end of the file so they out-cascade the component base rules
+   above (notably .compare-grid, declared after the main media-query block). */
+
+@media (max-width: 1240px) {
+  .two-column,
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
 }
