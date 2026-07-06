@@ -797,3 +797,41 @@ def test_cache_monitoring_endpoint_reports_stats():
     assert "index_cache" in payload and "query_cache" in payload
     assert payload["query_cache"]["max_entries"] >= 1
     assert "Redis" in payload["scope"]
+
+
+def test_drift_monitoring_endpoint_graceful_without_baseline(tmp_path, monkeypatch):
+    import adip.monitoring.drift as drift_module
+
+    monkeypatch.setattr(drift_module, "DEFAULT_BASELINE", tmp_path / "missing.json")
+    client = TestClient(create_app())
+
+    response = client.get("/monitoring/drift")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["available"] is False
+    assert "rebuild-baseline" in payload["reason"]
+
+
+def test_rag_query_appends_to_query_log(tmp_path, monkeypatch):
+    import adip.monitoring.drift as drift_module
+
+    log_path = tmp_path / "query_log.jsonl"
+    monkeypatch.setattr(drift_module, "DEFAULT_QUERY_LOG", log_path)
+    index_path = tmp_path / "index"
+    save_test_index(index_path)
+    client = TestClient(create_app())
+
+    client.post(
+        "/rag/query",
+        json={"index_path": str(index_path), "question": "What does the platform preserve?", "top_k": 1},
+    )
+
+    lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    import json as json_module
+
+    record = json_module.loads(lines[0])
+    assert record["question"] == "What does the platform preserve?"
+    assert record["top_score"] > 0
+    assert record["cached"] is False

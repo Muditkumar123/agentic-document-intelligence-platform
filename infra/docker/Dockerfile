@@ -58,6 +58,8 @@ RUN chmod +x ./entrypoint.sh \
         --golden data/eval/golden_qa.jsonl --abstention-threshold 0.10 \
         --metrics-output data/monitoring/generation_eval_metrics.json \
         --report-output data/monitoring/generation_eval_report.json \
+    && python -m adip.mlops.run_drift_report --rebuild-baseline \
+        --index data/processed/vector_index --golden data/eval/golden_qa.jsonl \
     && python -m adip.rag.index --chunks data/processed/chunks.jsonl \
         --index data/processed/vector_index_dense --backend dense --no-faiss \
     && python -m adip.rag.index --chunks data/processed/chunks.jsonl \

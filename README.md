@@ -253,6 +253,8 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.mlops.run_generation_e
 
 An optional **LLM-as-judge** pass (`--judge-model-name ... --judge-endpoint-url ... --judge-api-key ...`) scores the same answers semantically and reports lexical-vs-judge agreement (mean gap + Pearson correlation), quantifying how far the cheap CI-safe proxy can be trusted. See [docs/LLMOPS.md](docs/LLMOPS.md#llm-as-judge-optional-second-opinion).
 
+Every query is also logged (best-effort) and compared against a drift baseline built from the golden questions: `GET /monitoring/drift` grades vocabulary OOV rate, question-length shift, and retrieval-score PSI with ok/warn/alert thresholds — the signal that live traffic has left the distribution the quality numbers were measured on. See [docs/API.md](docs/API.md#drift-monitoring).
+
 The query path is cached in-process: loaded indexes are keyed by pickle mtime (a rebuild invalidates naturally) and repeat `/rag/query` requests are served from a bounded LRU (~30x faster, `"cached": true` in the response, `GET /monitoring/cache` for hit/miss stats). Single-process by design for the free hosting tier — Redis is the documented multi-instance upgrade path.
 
 An optional **RAGAS** pass (`pip install -e ".[ragas]"`, then `--ragas-model-name ... --ragas-endpoint-url ...`) adds the industry-standard metrics — faithfulness, answer relevancy, context precision, context recall — behind the same report shape, including three-way faithfulness agreement (RAGAS vs lexical proxy vs judge). The context metrics give graded retrieval evaluation where hit@k/MRR are saturated. See [docs/LLMOPS.md](docs/LLMOPS.md#standardized-ragas-metrics-optional).

@@ -168,6 +168,14 @@ curl http://127.0.0.1:8010/monitoring/cache
 
 Reports hit/miss statistics for the two in-process caches: the **index cache** (loaded indexes keyed by pickle mtime, so a rebuild invalidates naturally — no explicit invalidation hooks to forget) and the **query cache** (bounded LRU over full `/rag/query` responses, keyed by request payload + index mtime). Cached responses carry `"cached": true` and skip retrieval entirely (~30x faster on repeats); pass `"use_cache": false` in the query request to bypass. This is deliberately single-process (works on the free hosting tier, vanishes on restart); Redis is the documented upgrade path for multi-instance deployments.
 
+## Drift Monitoring
+
+```bash
+curl http://127.0.0.1:8010/monitoring/drift
+```
+
+Compares recently logged queries (every `/rag/query` appends to `data/monitoring/query_log.jsonl`, best-effort) against a **baseline built from the golden questions** — the distribution all quality numbers were measured on. Three components, each graded ok/warn/alert: **vocabulary OOV rate** (are users asking about things the corpus was never validated for?), **question-length z-score**, and **retrieval-score PSI** (population stability index over baseline deciles; honestly reported as `insufficient_data` below 20 queries). Overall status is the worst component. Build or refresh the baseline with `python -m adip.mlops.run_drift_report --rebuild-baseline`; the container bakes one at build time.
+
 ## Offline Evaluation Snapshot
 
 ```bash
