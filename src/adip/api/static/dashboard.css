@@ -1333,3 +1333,24 @@ pre {
   font-size: 0.7rem;
   font-style: normal;
 }
+
+/* --- Raw Documents row alignment -------------------------------------------- */
+/* .danger-action only sets colors; without the flex base its button sits
+   misaligned next to the badge, and the badge text could wrap mid-label. */
+
+.doc-badge {
+  white-space: nowrap;
+}
+
+.doc-item .danger-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
