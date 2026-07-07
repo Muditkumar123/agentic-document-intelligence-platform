@@ -8,7 +8,12 @@ from adip.rag.bm25 import build_bm25_index
 from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.evaluate import aggregate_by_category, evaluate, read_golden
 from adip.rag.rerank import rerank_results, resolve_candidate_k
-from adip.rag.retriever import build_index, load_index, reciprocal_rank_fusion
+from adip.rag.retriever import (
+    build_index,
+    load_index,
+    matches_document_filter,
+    reciprocal_rank_fusion,
+)
 
 
 def make_chunk(chunk_id, text):
@@ -111,6 +116,18 @@ def test_generic_pdf_summary_uses_only_indexed_pdf_when_other_files_exist():
     results = index.search("give me a summary of this pdf file", top_k=2)
 
     assert [item.chunk["chunk_id"] for item in results] == ["chunk_pdf_title", "chunk_pdf_method"]
+
+
+def test_document_filter_matches_partial_filename():
+    chunk = {
+        "document_id": "doc_abc123",
+        "filename": "GenNet.pdf",
+        "source_path": "data/raw/GenNet.pdf",
+    }
+    assert matches_document_filter(chunk, "GenNet.pdf")
+    assert matches_document_filter(chunk, "gennet")
+    assert matches_document_filter(chunk, "doc_abc123")
+    assert not matches_document_filter(chunk, "transformers")
 
 
 def test_document_filter_limits_retrieval_to_selected_document():

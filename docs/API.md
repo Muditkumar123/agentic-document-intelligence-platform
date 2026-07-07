@@ -152,6 +152,10 @@ This endpoint runs ingestion and index building in one call. It is useful for de
 
 `backend` accepts `tfidf`, `dense`, `dense_lsa`, `sentence_transformers`, or `hybrid`. The hybrid backend fuses BM25 and dense rankings with weighted reciprocal-rank fusion and honors two optional fields: `rrf_k` (default 60) and `hybrid_dense_weight` (0–1, default 0.5; BM25 gets the remainder).
 
+`all_backends: true` additionally rebuilds the sibling standard-backend indexes from the same chunks — given any of `vector_index`, `vector_index_dense`, or `vector_index_hybrid` as `index_path`, all three are written. The dashboard's Rebuild Index button sends this flag so switching retrieval backends never hits an index missing recently uploaded documents; the extra builds are listed under `additional_indexes` in the response.
+
+On `/rag/query`, `document_filter` restricts retrieval to one document. It matches the document id, filename, or source path — exactly first, then as a case-insensitive partial name (`"gennet"` selects `GenNet.pdf`). A filter that matches nothing returns an explicit "does not match any document" answer listing the indexed filenames, rather than a generic no-evidence abstention.
+
 ## Monitoring Summary
 
 ```bash

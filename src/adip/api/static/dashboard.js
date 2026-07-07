@@ -661,6 +661,7 @@ function buildIndexPayload() {
     backend: $("indexBackend").value,
     chunk_size: Number($("chunkSize").value),
     chunk_overlap: Number($("chunkOverlap").value),
+    all_backends: true,
   };
 }
 
@@ -712,15 +713,17 @@ function renderIndexResult(payload) {
   setLatency(payload.latency_ms);
   const index = payload.index || {};
   const ingestion = payload.ingestion || {};
-  renderAnswer(
-    [
-      `Status: ${payload.status}`,
-      `Documents: ${ingestion.document_count}`,
-      `Chunks: ${ingestion.chunk_count}`,
-      `Backend: ${index.backend}`,
-      `Index: ${index.index_path}`,
-    ].join("\n"),
-  );
+  const lines = [
+    `Status: ${payload.status}`,
+    `Documents: ${ingestion.document_count}`,
+    `Chunks: ${ingestion.chunk_count}`,
+    `Backend: ${index.backend}`,
+    `Index: ${index.index_path}`,
+  ];
+  (payload.additional_indexes || []).forEach((extra) => {
+    lines.push(`Also rebuilt: ${extra.index_path} (${extra.backend})`);
+  });
+  renderAnswer(lines.join("\n"));
   renderQuality(null);
   renderCitations([]);
   renderTrace([]);

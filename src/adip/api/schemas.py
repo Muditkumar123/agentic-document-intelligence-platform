@@ -66,6 +66,9 @@ class RebuildIndexRequest(BaseModel):
     use_faiss: bool = True
     rrf_k: int = Field(default=60, ge=1)
     hybrid_dense_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Also rebuild the sibling standard-backend indexes (tfidf/dense/hybrid)
+    # from the same chunks so switching backends never hits a stale index.
+    all_backends: bool = False
 
 
 class ModelCheckRequest(BaseModel):

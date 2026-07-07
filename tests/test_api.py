@@ -287,6 +287,60 @@ def test_api_rebuild_index_runs_ingestion_and_indexing(tmp_path):
     assert index_path.exists()
 
 
+def test_api_rebuild_index_all_backends_builds_siblings(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "sample.md").write_text(
+        "Rebuilding with all_backends keeps the tfidf, dense, and hybrid indexes in sync.",
+        encoding="utf-8",
+    )
+    chunks_path = tmp_path / "chunks.jsonl"
+    index_path = tmp_path / "vector_index"
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/pipeline/rebuild-index",
+        json={
+            "input_path": str(raw_dir),
+            "chunks_path": str(chunks_path),
+            "index_path": str(index_path),
+            "use_faiss": False,
+            "all_backends": True,
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["index"]["backend"] == "tfidf"
+    extra = {item["backend"]: item["index_path"] for item in payload["additional_indexes"]}
+    assert set(extra) == {"dense_lsa", "hybrid"}
+    assert (tmp_path / "vector_index_dense").exists()
+    assert (tmp_path / "vector_index_hybrid").exists()
+
+
+def test_api_rag_query_reports_unmatched_document_filter(tmp_path):
+    index_path = tmp_path / "index"
+    chunks = [make_chunk("chunk_a", "Neural differential cryptanalysis notes.")]
+    build_index(chunks, backend="tfidf").save(index_path)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/rag/query",
+        json={
+            "index_path": str(index_path),
+            "document_filter": "zzz-absent-doc",
+            "question": "What mentions neural differential cryptanalysis?",
+            "top_k": 1,
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["retrieved"] == []
+    assert "does not match any document" in payload["answer"]
+    assert "sample.md" in payload["answer"]
+
+
 def test_api_list_documents_reports_index_status(tmp_path):
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
