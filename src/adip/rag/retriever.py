@@ -570,7 +570,9 @@ def matches_document_filter(chunk: dict[str, Any], document_filter: str) -> bool
             return True
         if value and Path(value).name.lower() == needle:
             return True
-    return False
+    # Partial-name fallback: "gennet" should select "GenNet.pdf" without the
+    # caller knowing the exact extension or document id.
+    return any(needle in value.lower() for value in values if value)
 
 
 def summarize_index_documents(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:

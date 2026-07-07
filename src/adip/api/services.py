@@ -28,7 +28,12 @@ from adip.monitoring.drift import append_query_record, drift_report, load_baseli
 from adip.rag.answer import build_extractive_answer
 from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.rerank import rerank_results, resolve_candidate_k
-from adip.rag.retriever import build_index, load_index, summarize_index_documents
+from adip.rag.retriever import (
+    build_index,
+    load_index,
+    matches_document_filter,
+    summarize_index_documents,
+)
 from adip.rag.rewrite import retrieve_with_rewrites, rewrite_question
 
 SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md"}
@@ -334,6 +339,15 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
         cross_encoder_local_files_only=not request.allow_reranker_download,
     )
     answer = build_extractive_answer(request.question, retrieved)
+    if not retrieved and request.document_filter:
+        if not any(matches_document_filter(chunk, request.document_filter) for chunk in index.chunks):
+            names = sorted({str(doc["filename"]) for doc in summarize_index_documents(index.chunks)})
+            answer = (
+                f"The document filter {request.document_filter!r} does not match any document in "
+                f"this index, so nothing could be retrieved. Clear the Target Document filter, or "
+                f"rebuild this index if the document was uploaded after the last rebuild. "
+                f"Indexed documents: {', '.join(names[:12])}."
+            )
     retrieved_records = [item.to_dict() for item in retrieved]
     latency_ms = (time.perf_counter() - started) * 1000
 
@@ -467,6 +481,27 @@ def check_model_connection(request: ModelCheckRequest) -> dict[str, Any]:
     }
 
 
+STANDARD_BACKEND_SUFFIXES: dict[str, str] = {"tfidf": "", "dense": "_dense", "hybrid": "_hybrid"}
+
+
+def standard_index_paths(index_path: Path) -> dict[str, Path]:
+    """Map each standard backend to its sibling index path.
+
+    The dashboard's three indexes share a base name plus a backend suffix
+    (vector_index, vector_index_dense, vector_index_hybrid); accept any of the
+    three as input and derive the full set.
+    """
+    base = index_path.name
+    for suffix in STANDARD_BACKEND_SUFFIXES.values():
+        if suffix and base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
+    return {
+        backend: index_path.with_name(f"{base}{suffix}")
+        for backend, suffix in STANDARD_BACKEND_SUFFIXES.items()
+    }
+
+
 def rebuild_index(request: RebuildIndexRequest) -> dict[str, Any]:
     started = time.perf_counter()
     ingestion = ingest_path(
@@ -476,32 +511,46 @@ def rebuild_index(request: RebuildIndexRequest) -> dict[str, Any]:
         chunk_overlap=request.chunk_overlap,
     )
     chunks = read_chunks_jsonl(request.chunks_path)
-    index = build_index(
-        chunks,
-        backend=request.backend,
-        ngram_max=request.ngram_max,
-        embedding_model=request.embedding_model,
-        dense_dimensions=request.dense_dimensions,
-        use_faiss=request.use_faiss,
-        rrf_k=request.rrf_k,
-        hybrid_dense_weight=request.hybrid_dense_weight,
-    )
-    index.save(request.index_path)
-    latency_ms = (time.perf_counter() - started) * 1000
 
-    return {
-        "status": "completed",
-        "latency_ms": latency_ms,
-        "ingestion": ingestion.to_dict(),
-        "index": {
+    def build_and_save(backend: str, index_path: Path) -> dict[str, Any]:
+        index = build_index(
+            chunks,
+            backend=backend,
+            ngram_max=request.ngram_max,
+            embedding_model=request.embedding_model,
+            dense_dimensions=request.dense_dimensions,
+            use_faiss=request.use_faiss,
+            rrf_k=request.rrf_k,
+            hybrid_dense_weight=request.hybrid_dense_weight,
+        )
+        index.save(index_path)
+        return {
             "backend": index.backend,
             "chunk_count": len(index.chunks),
             "embedding_model": index.embedding_model,
-            "index_path": str(request.index_path),
+            "index_path": str(index_path),
             "metadata": index.metadata,
             "vocabulary_size": index.vocabulary_size,
-        },
+        }
+
+    primary = build_and_save(request.backend, request.index_path)
+    additional: list[dict[str, Any]] = []
+    if request.all_backends:
+        for backend, index_path in standard_index_paths(request.index_path).items():
+            if index_path == request.index_path:
+                continue
+            additional.append(build_and_save(backend, index_path))
+
+    latency_ms = (time.perf_counter() - started) * 1000
+    payload = {
+        "status": "completed",
+        "latency_ms": latency_ms,
+        "ingestion": ingestion.to_dict(),
+        "index": primary,
     }
+    if additional:
+        payload["additional_indexes"] = additional
+    return payload
 
 
 def sorted_history_paths(root: Path, pattern: str, limit: int) -> list[Path]:
