@@ -46,7 +46,7 @@ finetune = [
 ]
 ragas = [
   "ragas>=0.4,<0.5",
-  "langchain-core>=0.3,<0.4",
+  "langchain-core>=0.3,<1.6",
   "langchain-community>=0.3,<0.4",
   "langchain-openai>=0.3,<0.4",
   "langchain-huggingface>=0.1,<0.2",
