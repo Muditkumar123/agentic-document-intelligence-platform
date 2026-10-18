@@ -2,8 +2,8 @@
 
 Two caches, both honest about what they are:
 
-- ``IndexCache`` — the loaded ``RagIndex`` keyed by (path, pickle mtime). Every
-  query used to re-unpickle the index from disk; the mtime key means a rebuild
+- ``IndexCache`` — the loaded ``RagIndex`` keyed by (path, index file mtime).
+  Every query used to reload the index from disk; the mtime key means a rebuild
   invalidates the entry naturally, with no explicit invalidation hooks to forget.
 - ``QueryCache`` — a bounded LRU over full query responses, keyed by the request
   payload plus the index mtime (so cached answers can never outlive the index
@@ -24,16 +24,16 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
-from adip.rag.retriever import INDEX_FILENAME, RagIndex, load_index
+from adip.rag.retriever import RagIndex, load_index, saved_index_file
 
 DEFAULT_QUERY_CACHE_SIZE = 256
 DEFAULT_INDEX_CACHE_SIZE = 4
 
 
 def index_fingerprint(index_dir: Path) -> tuple[str, int]:
-    """(resolved path, mtime_ns) of the index pickle — the invalidation key."""
-    pickle_path = index_dir.expanduser() / INDEX_FILENAME
-    return str(pickle_path.resolve()), pickle_path.stat().st_mtime_ns
+    """(resolved path, mtime_ns) of the saved index file — the invalidation key."""
+    index_file = saved_index_file(index_dir)
+    return str(index_file.resolve()), index_file.stat().st_mtime_ns
 
 
 class IndexCache:

@@ -152,6 +152,48 @@ The answer panel rendered literal `###`, `**bold**`, `1.` list markers, and `$2^
 
 > Note: KaTeX is CDN-hosted, so math rendering needs browser internet. It can be vendored into `static/` for fully offline use.
 
+## 5. The public API trusted client-supplied paths and unpickled its indexes
+
+Status: Fixed.
+
+### Symptom
+
+Anyone who could reach the API, including visitors to the public Render demo, could:
+
+- write an upload into any directory the process could write to (`raw_dir` form field on `POST /documents/upload`);
+- delete `.pdf`/`.md`/`.txt` files in any directory (`raw_dir` on `DELETE /documents/{filename}`);
+- ingest any folder on the server and make its text searchable (`input_path` on `POST /pipeline/rebuild-index`), and write chunk files, indexes, and agent traces to arbitrary locations (`chunks_path`, `index_path`, `trace_dir`);
+- point `POST /rag/query` and `POST /agent/run` at any directory, whose `rag_index.pkl` the server would `pickle.load`;
+- upload a file of any size, read whole into memory;
+- delete the demo corpus or rebuild the index, with no authentication at all.
+
+### Root cause
+
+Two design shortcuts that are harmless on a laptop and dangerous on a network:
+
+1. **The request chose the filesystem.** Every path was a request field with a default, so the dashboard could switch indexes by editing a text box. Nothing confined those paths to the project's data folder; only uploaded *filenames* were sanitized.
+2. **Indexes were pickles.** `RagIndex.save` pickled the whole object, and unpickling executes whatever callables the file names. Combined with a client-chosen `index_path`, that is a classic remote-code-execution shape (no direct way to plant a malicious pickle was found, since uploads are restricted to document extensions, but the safety rested on that alone).
+
+### Fix
+
+- **Server-owned layout** (`adip/api/settings.py`). The server decides `data/raw`, `data/processed/chunks.jsonl`, the three `vector_index*` directories, and the trace directory. Clients pick an index by `backend` name. Request models use `extra="forbid"`, so a stale client sending `index_path` gets a 422, not a silent fallback.
+- **Pickle-free index format** (`adip/rag/serialization.py`). An index is one `rag_index.npz`: numeric arrays plus a JSON manifest, loaded with `np.load(allow_pickle=False)`. Fitted vectorizers are stored as constructor parameters, vocabulary, and IDF weights (restored through scikit-learn's public `idf_` setter); the LSA projection is stored as its component matrix. Writes are atomic (temp file plus rename). A directory holding only an old `rag_index.pkl` raises a "rebuild the index" error; the pickle is never opened.
+- **Write protection** (`adip/api/security.py`). Upload, delete, and rebuild require `Authorization: Bearer $ADIP_ADMIN_TOKEN` (compared with `hmac.compare_digest`). With no token configured they only accept loopback clients: the local dev server still works with no setup, and any network-exposed deployment fails closed. `render.yaml` generates a token; the dashboard has an Admin Token field, kept in memory only.
+- **Upload limits.** `ADIP_MAX_UPLOAD_MB` (default 20). An ASGI middleware refuses an oversized declared `Content-Length` before anything is buffered and counts bytes for chunked bodies; the upload handler also reads at most one byte past the limit.
+
+### Verification
+
+- `tests/test_rag.py`: `test_saved_index_round_trips_with_identical_search_results` (tfidf, dense, hybrid give identical rankings and scores after a save/load), `test_saved_index_is_a_pickle_free_archive`, `test_load_index_refuses_legacy_pickle_without_unpickling` and `test_load_index_refuses_pickle_saved_under_the_new_filename` (a pickle payload that would write a marker file never runs), `test_saving_an_index_removes_a_legacy_pickle`, `test_load_index_rejects_unknown_format_version`.
+- `tests/test_api.py`: `test_api_requests_reject_client_supplied_paths`, `test_api_upload_ignores_client_raw_dir`, `test_api_delete_ignores_client_raw_dir`, `test_write_endpoints_require_the_admin_token`, `test_write_endpoints_without_a_token_only_accept_loopback_clients`, `test_read_endpoints_stay_open_when_a_token_is_configured`, `test_upload_over_the_size_limit_is_rejected`, `test_request_body_over_the_limit_is_rejected_before_auth`, `test_streamed_request_body_without_content_length_is_counted`.
+- End to end against a running server: 401 without a token, 422 for `index_path`, 413 for oversized uploads (from the handler and from the middleware), a `raw_dir` form field ignored, and loopback writes allowed but a forwarded remote client refused when no token is set.
+- The suite passes on the pinned conda environment and on a clean venv with the latest scikit-learn, NumPy, and FastAPI.
+
+Existing local indexes are `rag_index.pkl` files and must be rebuilt once (`python -m adip.rag.index ...`, or Rebuild Index in the dashboard). The Docker image builds its indexes at build time, so deployments need nothing extra.
+
+### Interview line
+
+> The API let the client choose filesystem paths and then unpickled whatever index sat at that path. I moved every path to server-side settings, replaced pickle with a plain-array format that cannot execute code on load, and put the write endpoints behind a token that fails closed when it is missing, with regression tests that try each attack.
+
 ## Related answer-quality safeguards already in place
 
 These guards were added in earlier work and are catalogued here so the hosted-answer path is documented in one place. Each has its own test.

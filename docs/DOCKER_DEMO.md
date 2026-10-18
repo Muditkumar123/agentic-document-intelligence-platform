@@ -10,6 +10,12 @@ From the project root:
 docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
+That is enough to query and run the agent. To also upload, delete, or rebuild from the dashboard, start it with an admin token (requests from your browser reach the container from the Docker network, so the no-token local-only mode refuses them):
+
+```bash
+ADIP_ADMIN_TOKEN=choose-a-long-random-token docker compose -f infra/docker/docker-compose.yml up --build
+```
+
 Open:
 
 ```text
@@ -24,8 +30,8 @@ http://127.0.0.1:8010/docs
 
 ## Demo Flow
 
-1. Open the `Index` tab.
-2. Upload a `.pdf`, `.md`, or `.txt` document.
+1. Open the `Documents` tab and enter the admin token.
+2. Upload a `.pdf`, `.md`, or `.txt` document (up to 20 MB by default).
 3. Click `Rebuild Index`.
 4. Manage the corpus in the `Raw Documents` list: each file shows its size and an indexed/not-indexed badge, with a Delete button. A stale-index hint appears whenever the raw folder and the index disagree.
 5. Open the `RAG` tab and ask a cited question.

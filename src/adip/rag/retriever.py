@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
-import pickle
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +15,23 @@ from sklearn.metrics.pairwise import linear_kernel
 from sklearn.preprocessing import normalize
 
 from adip.rag.bm25 import DEFAULT_BM25_B, DEFAULT_BM25_K1, Bm25Index, build_bm25_index
+from adip.rag.serialization import (
+    IndexFormatError,
+    decode_json,
+    encode_json,
+    pack_matrix,
+    read_npz,
+    restore_count_vectorizer,
+    restore_tfidf_vectorizer,
+    unpack_matrix,
+    vectorizer_state,
+    write_npz_atomic,
+)
 
-INDEX_FILENAME = "rag_index.pkl"
+INDEX_FILENAME = "rag_index.npz"
+LEGACY_PICKLE_FILENAME = "rag_index.pkl"
+INDEX_FORMAT = "adip-rag-index"
+INDEX_FORMAT_VERSION = 1
 FAISS_INDEX_FILENAME = "faiss.index"
 DENSE_BACKENDS = {"dense", "dense_lsa", "sentence_transformers"}
 HYBRID_BACKEND = "hybrid"
@@ -62,6 +76,20 @@ GENERIC_DOCUMENT_PHRASES = (
 )
 
 
+class LegacyIndexFormatError(FileNotFoundError):
+    """Only an old pickle index exists; it is never loaded because unpickling can run code."""
+
+
+@dataclass
+class LinearProjection:
+    """The fitted LSA projection: query embedding needs only ``TruncatedSVD.components_``."""
+
+    components: np.ndarray
+
+    def transform(self, matrix: Any) -> np.ndarray:
+        return np.asarray(matrix @ self.components.T)
+
+
 @dataclass(frozen=True)
 class RetrievedChunk:
     chunk: dict[str, Any]
@@ -96,7 +124,7 @@ class RagIndex:
     vectorizer: TfidfVectorizer | None
     matrix: Any
     chunks: list[dict[str, Any]]
-    svd: Any | None = None
+    svd: LinearProjection | None = None
     embedding_model: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     faiss_index: Any | None = None
@@ -273,11 +301,44 @@ class RagIndex:
         ]
 
     def save(self, index_dir: Path) -> None:
+        """Persist as one pickle-free ``.npz`` archive (arrays + a JSON manifest)."""
         path = index_dir.expanduser()
         path.mkdir(parents=True, exist_ok=True)
-        serializable = replace(self, faiss_index=None)
-        with (path / INDEX_FILENAME).open("wb") as file_obj:
-            pickle.dump(serializable, file_obj)
+        arrays: dict[str, np.ndarray] = {}
+        manifest: dict[str, Any] = {
+            "format": INDEX_FORMAT,
+            "format_version": INDEX_FORMAT_VERSION,
+            "backend": self.backend,
+            "embedding_model": self.embedding_model,
+            "metadata": self.metadata,
+            "rrf_k": self.rrf_k,
+            "hybrid_dense_weight": self.hybrid_dense_weight,
+            "chunks": self.chunks,
+            "matrix": pack_matrix("matrix", self.matrix, arrays),
+            "vectorizer": None,
+            "svd": self.svd is not None,
+            "bm25": None,
+        }
+        if self.vectorizer is not None:
+            manifest["vectorizer"] = vectorizer_state(self.vectorizer)
+            if self.vectorizer.use_idf:
+                arrays["vectorizer_idf"] = np.asarray(self.vectorizer.idf_, dtype="float64")
+        if self.svd is not None:
+            arrays["svd_components"] = np.asarray(self.svd.components)
+        if self.bm25 is not None:
+            manifest["bm25"] = {
+                "vectorizer": vectorizer_state(self.bm25.vectorizer),
+                "matrix": pack_matrix("bm25_matrix", self.bm25.matrix, arrays),
+                "avg_doc_length": self.bm25.avg_doc_length,
+                "k1": self.bm25.k1,
+                "b": self.bm25.b,
+            }
+            arrays["bm25_idf"] = np.asarray(self.bm25.idf)
+            arrays["bm25_doc_lengths"] = np.asarray(self.bm25.doc_lengths)
+        arrays["manifest"] = encode_json(manifest)
+        write_npz_atomic(path / INDEX_FILENAME, arrays)
+        # A stale pickle beside the new archive would only invite someone to load it.
+        (path / LEGACY_PICKLE_FILENAME).unlink(missing_ok=True)
         if self.faiss_index is not None:
             faiss = import_optional_faiss()
             if faiss is not None:
@@ -462,7 +523,7 @@ def build_dense_index(
 def build_lsa_embeddings(
     texts: list[str],
     dense_dimensions: int,
-) -> tuple[TfidfVectorizer, TruncatedSVD | None, np.ndarray]:
+) -> tuple[TfidfVectorizer, LinearProjection | None, np.ndarray]:
     vectorizer = TfidfVectorizer(
         lowercase=True,
         stop_words="english",
@@ -474,8 +535,9 @@ def build_lsa_embeddings(
     max_components = max(0, min(sparse_matrix.shape) - 1)
     if max_components >= 1:
         n_components = min(dense_dimensions, max_components)
-        svd = TruncatedSVD(n_components=n_components, random_state=42)
-        matrix = svd.fit_transform(sparse_matrix)
+        fitted_svd = TruncatedSVD(n_components=n_components, random_state=42)
+        matrix = fitted_svd.fit_transform(sparse_matrix)
+        svd = LinearProjection(components=fitted_svd.components_)
     else:
         svd = None
         matrix = sparse_matrix.toarray()
@@ -631,17 +693,79 @@ def validate_backend(backend: str) -> None:
         raise ValueError(f"Unsupported backend: {backend}")
 
 
-def load_index(index_dir: Path) -> RagIndex:
+def saved_index_file(index_dir: Path) -> Path:
+    """Path of the saved index archive; raises the same errors as ``load_index`` when it is absent."""
     path = index_dir.expanduser() / INDEX_FILENAME
-    if not path.exists():
-        raise FileNotFoundError(f"RAG index not found: {path}")
-    with path.open("rb") as file_obj:
-        loaded = pickle.load(file_obj)
-    if not isinstance(loaded, RagIndex):
-        raise TypeError(f"Unexpected index object in {path}: {type(loaded)!r}")
+    if path.exists():
+        return path
+    if (path.parent / LEGACY_PICKLE_FILENAME).exists():
+        raise LegacyIndexFormatError(
+            f"{path.parent} only has an old pickle index ({LEGACY_PICKLE_FILENAME}), which is not "
+            "loaded because unpickling a file can run arbitrary code. Rebuild the index "
+            "(python -m adip.rag.index, or Rebuild Index in the dashboard)."
+        )
+    raise FileNotFoundError(f"RAG index not found: {path}")
+
+
+def load_index(index_dir: Path) -> RagIndex:
+    path = saved_index_file(index_dir)
+    arrays = read_npz(path)
+    try:
+        loaded = index_from_arrays(arrays)
+    except IndexFormatError:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IndexFormatError(f"Index file {path} is incomplete or corrupt: {exc}") from exc
     faiss_path = path.parent / FAISS_INDEX_FILENAME
     if faiss_path.exists():
         faiss = import_optional_faiss()
         if faiss is not None:
             loaded.faiss_index = faiss.read_index(str(faiss_path))
     return loaded
+
+
+def index_from_arrays(arrays: dict[str, np.ndarray]) -> RagIndex:
+    """Rebuild a RagIndex from the arrays of a saved archive (see ``RagIndex.save``)."""
+    if "manifest" not in arrays:
+        raise IndexFormatError("Index file has no manifest")
+    manifest = decode_json(arrays["manifest"])
+    if manifest.get("format") != INDEX_FORMAT or manifest.get("format_version") != INDEX_FORMAT_VERSION:
+        raise IndexFormatError(
+            f"Unsupported index format {manifest.get('format')!r} "
+            f"v{manifest.get('format_version')!r}; rebuild the index"
+        )
+    validate_backend(manifest["backend"])
+
+    vectorizer = None
+    if manifest["vectorizer"] is not None:
+        vectorizer = restore_tfidf_vectorizer(manifest["vectorizer"], arrays.get("vectorizer_idf"))
+    svd = LinearProjection(components=arrays["svd_components"]) if manifest["svd"] else None
+    bm25 = None
+    if manifest["bm25"] is not None:
+        entry = manifest["bm25"]
+        bm25 = Bm25Index(
+            vectorizer=restore_count_vectorizer(entry["vectorizer"]),
+            matrix=unpack_matrix("bm25_matrix", entry["matrix"], arrays),
+            idf=arrays["bm25_idf"],
+            doc_lengths=arrays["bm25_doc_lengths"],
+            avg_doc_length=float(entry["avg_doc_length"]),
+            k1=float(entry["k1"]),
+            b=float(entry["b"]),
+        )
+
+    chunks = manifest["chunks"]
+    matrix = unpack_matrix("matrix", manifest["matrix"], arrays)
+    if matrix.shape[0] != len(chunks):
+        raise IndexFormatError(f"Index matrix has {matrix.shape[0]} rows but {len(chunks)} chunks")
+    return RagIndex(
+        backend=manifest["backend"],
+        vectorizer=vectorizer,
+        matrix=matrix,
+        chunks=chunks,
+        svd=svd,
+        embedding_model=manifest["embedding_model"],
+        metadata=manifest["metadata"],
+        bm25=bm25,
+        rrf_k=int(manifest["rrf_k"]),
+        hybrid_dense_weight=float(manifest["hybrid_dense_weight"]),
+    )

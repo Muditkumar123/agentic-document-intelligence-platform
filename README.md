@@ -78,7 +78,7 @@ python -m adip.api --host 127.0.0.1 --port 8010
 ```
 
 The dashboard is at `http://127.0.0.1:8010/` and the OpenAPI docs at `/docs`.
-Run the test suite with `pytest` (202 tests, hermetic, no GPU needed).
+Run the test suite with `pytest` (225 tests, hermetic, no GPU needed).
 
 ## API
 
@@ -87,6 +87,11 @@ backend selection and caching), `POST /agent/run`, document upload/delete and
 index rebuild, history endpoints for agent traces and tracked runs, and
 monitoring endpoints for generation eval, retrieval benchmarks, drift and
 cache stats. Examples in [docs/API.md](docs/API.md).
+
+The server owns every filesystem path (clients pick an index by backend name),
+upload/delete/rebuild need an admin token (`ADIP_ADMIN_TOKEN`), uploads are
+size-limited, and indexes are stored without pickle. See the
+[security model](docs/API.md#security-model).
 
 ## Documentation
 

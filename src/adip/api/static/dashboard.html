@@ -13,7 +13,7 @@
       defer
       src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
     ></script>
-    <link rel="stylesheet" href="/static/dashboard.css?v=20260707-ui5" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20261018-sec1" />
   </head>
   <body>
     <header class="topbar">
@@ -94,10 +94,6 @@
               <textarea id="ragQuestion" rows="4">What does the platform do with documents?</textarea>
             </label>
             <label>
-              Index Path
-              <input id="ragIndexPath" value="data/processed/vector_index" />
-            </label>
-            <label>
               Target Document
               <select id="ragDocumentFilter">
                 <option value="">All Indexed Documents</option>
@@ -149,8 +145,12 @@
               <textarea id="agentQuestion" rows="4">Create a research brief about the document intelligence platform.</textarea>
             </label>
             <label>
-              Index Path
-              <input id="agentIndexPath" value="data/processed/vector_index" />
+              Retrieval Backend
+              <select id="agentBackend">
+                <option value="tfidf" selected>TF-IDF (sparse)</option>
+                <option value="dense">Dense LSA (semantic)</option>
+                <option value="hybrid">Hybrid (BM25 + dense, RRF)</option>
+              </select>
             </label>
             <label>
               Target Document
@@ -316,6 +316,11 @@
 
           <form class="workflow-form hidden" id="indexForm" data-mode-panel="index">
             <label>
+              Admin Token
+              <input id="adminToken" type="password" autocomplete="off" placeholder="Needed to upload, delete, or rebuild" />
+            </label>
+            <div class="form-status" id="adminTokenHint">Upload, delete, and rebuild need the server's admin token.</div>
+            <label>
               Upload Document
               <input id="documentUpload" type="file" accept=".pdf,.md,.txt" />
             </label>
@@ -329,18 +334,6 @@
                 Upload + Rebuild
               </button>
             </div>
-            <label>
-              Input Path
-              <input id="inputPath" value="data/raw" />
-            </label>
-            <label>
-              Chunks Path
-              <input id="chunksPath" value="data/processed/chunks.jsonl" />
-            </label>
-            <label>
-              Index Path
-              <input id="indexPath" value="data/processed/vector_index" />
-            </label>
             <div class="split-fields">
               <label>
                 Backend
@@ -453,6 +446,6 @@
       </section>
     </main>
 
-    <script src="/static/dashboard.js?v=20260707-ui5" defer></script>
+    <script src="/static/dashboard.js?v=20261018-sec1" defer></script>
   </body>
 </html>

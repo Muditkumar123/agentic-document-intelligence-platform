@@ -10,3 +10,9 @@ services:
     plan: free
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      # Bearer token for upload/delete/rebuild. Render generates it once; copy it from the
+      # service's Environment page into the dashboard's Admin Token field. Without it the
+      # write endpoints refuse every request (they only trust loopback clients).
+      - key: ADIP_ADMIN_TOKEN
+        generateValue: true

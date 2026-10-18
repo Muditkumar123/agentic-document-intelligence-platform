@@ -16,6 +16,7 @@ from adip.api.services import (
     list_mlops_run_history,
     retrieval_benchmark_summary,
 )
+from adip.api.settings import ApiSettings
 from adip.rag.retriever import build_index
 
 
@@ -44,8 +45,21 @@ def save_test_index(path: Path) -> None:
     build_index(chunks, backend="tfidf").save(path)
 
 
+ADMIN_TOKEN = "test-admin-token"
+AUTH = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
+
+def make_settings(tmp_path: Path, **overrides) -> ApiSettings:
+    """Settings rooted in a temp data dir, so tests never touch the repo's data/."""
+    return ApiSettings(data_dir=tmp_path / "data", **{"admin_token": ADMIN_TOKEN, **overrides})
+
+
+def make_client(settings: ApiSettings | None = None, **client_kwargs) -> TestClient:
+    return TestClient(create_app(settings or ApiSettings(admin_token=ADMIN_TOKEN)), **client_kwargs)
+
+
 def test_api_health_endpoint():
-    client = TestClient(create_app())
+    client = make_client()
 
     response = client.get("/health")
 
@@ -54,7 +68,7 @@ def test_api_health_endpoint():
 
 
 def test_api_dashboard_and_assets_are_served():
-    client = TestClient(create_app())
+    client = make_client()
 
     dashboard = client.get("/")
     script = client.get("/static/dashboard.js")
@@ -77,7 +91,7 @@ def test_api_dashboard_and_assets_are_served():
 
 
 def test_api_model_profiles_endpoint_lists_profiles():
-    client = TestClient(create_app())
+    client = make_client()
 
     response = client.get("/model-profiles")
     payload = response.json()
@@ -107,7 +121,7 @@ def test_api_model_check_endpoint(monkeypatch):
             )
 
     monkeypatch.setattr(api_services, "OpenAICompatibleChatAdapter", FakeAdapter)
-    client = TestClient(create_app())
+    client = make_client()
 
     response = client.post(
         "/models/check",
@@ -126,14 +140,13 @@ def test_api_model_check_endpoint(monkeypatch):
 
 
 def test_api_rag_query_returns_cited_answer(tmp_path):
-    index_path = tmp_path / "index"
-    save_test_index(index_path)
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
 
     response = client.post(
         "/rag/query",
         json={
-            "index_path": str(index_path),
             "question": "What does the platform preserve?",
             "top_k": 1,
         },
@@ -149,7 +162,7 @@ def test_api_rag_query_returns_cited_answer(tmp_path):
 
 
 def test_api_rag_query_accepts_document_filter(tmp_path):
-    index_path = tmp_path / "index"
+    settings = make_settings(tmp_path)
     chunks = [
         {
             **make_chunk(
@@ -169,13 +182,12 @@ def test_api_rag_query_accepts_document_filter(tmp_path):
             "filename": "notes.md",
         },
     ]
-    build_index(chunks, backend="tfidf").save(index_path)
-    client = TestClient(create_app())
+    build_index(chunks, backend="tfidf").save(settings.index_path())
+    client = make_client(settings)
 
     response = client.post(
         "/rag/query",
         json={
-            "index_path": str(index_path),
             "document_filter": "doc_md",
             "question": "What mentions neural differential cryptanalysis?",
             "top_k": 1,
@@ -200,16 +212,13 @@ def test_indexed_documents_service_lists_index_documents(tmp_path):
 
 
 def test_api_agent_run_writes_trace(tmp_path):
-    index_path = tmp_path / "index"
-    trace_dir = tmp_path / "traces"
-    save_test_index(index_path)
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
 
     response = client.post(
         "/agent/run",
         json={
-            "index_path": str(index_path),
-            "trace_dir": str(trace_dir),
             "question": "What does the agent verify?",
             "task": "qa",
             "top_k": 1,
@@ -223,15 +232,16 @@ def test_api_agent_run_writes_trace(tmp_path):
     assert "quality" in payload
     assert payload["quality"]["evidence_count"] == 1
     assert Path(payload["trace_path"]).exists()
+    assert Path(payload["trace_path"]).parent == settings.trace_dir
 
 
 def test_api_upload_document_saves_supported_file(tmp_path):
-    raw_dir = tmp_path / "raw"
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    client = make_client(settings)
 
     response = client.post(
         "/documents/upload",
-        data={"raw_dir": str(raw_dir)},
+        headers=AUTH,
         files={"file": ("research brief.md", b"# Research\nUseful evidence.", "text/markdown")},
     )
 
@@ -240,15 +250,15 @@ def test_api_upload_document_saves_supported_file(tmp_path):
     assert payload["status"] == "uploaded"
     assert payload["filename"] == "research brief.md"
     assert payload["extension"] == ".md"
-    assert Path(payload["path"]).read_text(encoding="utf-8") == "# Research\nUseful evidence."
+    assert (settings.raw_dir / "research brief.md").read_text(encoding="utf-8") == "# Research\nUseful evidence."
 
 
 def test_api_upload_document_rejects_unsupported_file(tmp_path):
-    client = TestClient(create_app())
+    client = make_client(make_settings(tmp_path))
 
     response = client.post(
         "/documents/upload",
-        data={"raw_dir": str(tmp_path / "raw")},
+        headers=AUTH,
         files={"file": ("run.exe", b"nope", "application/octet-stream")},
     )
 
@@ -257,25 +267,18 @@ def test_api_upload_document_rejects_unsupported_file(tmp_path):
 
 
 def test_api_rebuild_index_runs_ingestion_and_indexing(tmp_path):
-    raw_dir = tmp_path / "raw"
-    raw_dir.mkdir()
-    (raw_dir / "sample.md").write_text(
+    settings = make_settings(tmp_path)
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "sample.md").write_text(
         "The API rebuild endpoint parses documents, writes chunks, and saves a searchable index.",
         encoding="utf-8",
     )
-    chunks_path = tmp_path / "chunks.jsonl"
-    index_path = tmp_path / "index"
-    client = TestClient(create_app())
+    client = make_client(settings)
 
     response = client.post(
         "/pipeline/rebuild-index",
-        json={
-            "input_path": str(raw_dir),
-            "chunks_path": str(chunks_path),
-            "index_path": str(index_path),
-            "chunk_size": 20,
-            "chunk_overlap": 2,
-        },
+        headers=AUTH,
+        json={"chunk_size": 20, "chunk_overlap": 2},
     )
 
     payload = response.json()
@@ -283,30 +286,23 @@ def test_api_rebuild_index_runs_ingestion_and_indexing(tmp_path):
     assert payload["status"] == "completed"
     assert payload["ingestion"]["chunk_count"] >= 1
     assert payload["index"]["backend"] == "tfidf"
-    assert chunks_path.exists()
-    assert index_path.exists()
+    assert settings.chunks_path.exists()
+    assert settings.index_path("tfidf").exists()
 
 
 def test_api_rebuild_index_all_backends_builds_siblings(tmp_path):
-    raw_dir = tmp_path / "raw"
-    raw_dir.mkdir()
-    (raw_dir / "sample.md").write_text(
+    settings = make_settings(tmp_path)
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "sample.md").write_text(
         "Rebuilding with all_backends keeps the tfidf, dense, and hybrid indexes in sync.",
         encoding="utf-8",
     )
-    chunks_path = tmp_path / "chunks.jsonl"
-    index_path = tmp_path / "vector_index"
-    client = TestClient(create_app())
+    client = make_client(settings)
 
     response = client.post(
         "/pipeline/rebuild-index",
-        json={
-            "input_path": str(raw_dir),
-            "chunks_path": str(chunks_path),
-            "index_path": str(index_path),
-            "use_faiss": False,
-            "all_backends": True,
-        },
+        headers=AUTH,
+        json={"use_faiss": False, "all_backends": True},
     )
 
     payload = response.json()
@@ -314,20 +310,19 @@ def test_api_rebuild_index_all_backends_builds_siblings(tmp_path):
     assert payload["index"]["backend"] == "tfidf"
     extra = {item["backend"]: item["index_path"] for item in payload["additional_indexes"]}
     assert set(extra) == {"dense_lsa", "hybrid"}
-    assert (tmp_path / "vector_index_dense").exists()
-    assert (tmp_path / "vector_index_hybrid").exists()
+    assert settings.index_path("dense").exists()
+    assert settings.index_path("hybrid").exists()
 
 
 def test_api_rag_query_reports_unmatched_document_filter(tmp_path):
-    index_path = tmp_path / "index"
+    settings = make_settings(tmp_path)
     chunks = [make_chunk("chunk_a", "Neural differential cryptanalysis notes.")]
-    build_index(chunks, backend="tfidf").save(index_path)
-    client = TestClient(create_app())
+    build_index(chunks, backend="tfidf").save(settings.index_path())
+    client = make_client(settings)
 
     response = client.post(
         "/rag/query",
         json={
-            "index_path": str(index_path),
             "document_filter": "zzz-absent-doc",
             "question": "What mentions neural differential cryptanalysis?",
             "top_k": 1,
@@ -342,20 +337,16 @@ def test_api_rag_query_reports_unmatched_document_filter(tmp_path):
 
 
 def test_api_list_documents_reports_index_status(tmp_path):
-    raw_dir = tmp_path / "raw"
-    raw_dir.mkdir()
+    settings = make_settings(tmp_path)
+    raw_dir = settings.raw_dir
+    raw_dir.mkdir(parents=True)
     (raw_dir / "indexed.md").write_text("Evidence text that will be indexed for retrieval.", encoding="utf-8")
     (raw_dir / "ignored.zip").write_bytes(b"not a document")
-    chunks_path = tmp_path / "chunks.jsonl"
-    index_path = tmp_path / "index"
-    client = TestClient(create_app())
-    client.post(
-        "/pipeline/rebuild-index",
-        json={"input_path": str(raw_dir), "chunks_path": str(chunks_path), "index_path": str(index_path)},
-    )
+    client = make_client(settings)
+    client.post("/pipeline/rebuild-index", headers=AUTH, json={})
     (raw_dir / "pending.md").write_text("Uploaded after the rebuild, so not indexed yet.", encoding="utf-8")
 
-    response = client.get("/documents", params={"raw_dir": str(raw_dir), "index_path": str(index_path)})
+    response = client.get("/documents")
 
     payload = response.json()
     assert response.status_code == 200
@@ -367,15 +358,12 @@ def test_api_list_documents_reports_index_status(tmp_path):
 
 
 def test_api_list_documents_works_without_an_index(tmp_path):
-    raw_dir = tmp_path / "raw"
-    raw_dir.mkdir()
-    (raw_dir / "only.md").write_text("No index has been built yet.", encoding="utf-8")
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "only.md").write_text("No index has been built yet.", encoding="utf-8")
+    client = make_client(settings)
 
-    response = client.get(
-        "/documents",
-        params={"raw_dir": str(raw_dir), "index_path": str(tmp_path / "missing_index")},
-    )
+    response = client.get("/documents")
 
     payload = response.json()
     assert response.status_code == 200
@@ -384,45 +372,39 @@ def test_api_list_documents_works_without_an_index(tmp_path):
 
 
 def test_api_delete_document_removes_file_and_flags_stale_index(tmp_path):
-    raw_dir = tmp_path / "raw"
-    raw_dir.mkdir()
+    settings = make_settings(tmp_path)
+    raw_dir = settings.raw_dir
+    raw_dir.mkdir(parents=True)
     (raw_dir / "doomed.md").write_text("This document will be deleted.", encoding="utf-8")
-    chunks_path = tmp_path / "chunks.jsonl"
-    index_path = tmp_path / "index"
-    client = TestClient(create_app())
-    client.post(
-        "/pipeline/rebuild-index",
-        json={"input_path": str(raw_dir), "chunks_path": str(chunks_path), "index_path": str(index_path)},
-    )
+    client = make_client(settings)
+    client.post("/pipeline/rebuild-index", headers=AUTH, json={})
 
-    response = client.delete("/documents/doomed.md", params={"raw_dir": str(raw_dir)})
+    response = client.delete("/documents/doomed.md", headers=AUTH)
 
     payload = response.json()
     assert response.status_code == 200
     assert payload["status"] == "deleted"
     assert not (raw_dir / "doomed.md").exists()
 
-    listing = client.get(
-        "/documents", params={"raw_dir": str(raw_dir), "index_path": str(index_path)}
-    ).json()
+    listing = client.get("/documents").json()
     assert listing["document_count"] == 0
     assert listing["indexed_but_deleted"] == ["doomed.md"]
     assert listing["index_stale"] is True
 
-    repeat = client.delete("/documents/doomed.md", params={"raw_dir": str(raw_dir)})
+    repeat = client.delete("/documents/doomed.md", headers=AUTH)
     assert repeat.status_code == 404
 
 
 def test_api_delete_document_rejects_unsupported_type(tmp_path):
-    raw_dir = tmp_path / "raw"
-    raw_dir.mkdir()
-    (raw_dir / "config.yaml").write_text("secret: true", encoding="utf-8")
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "config.yaml").write_text("secret: true", encoding="utf-8")
+    client = make_client(settings)
 
-    response = client.delete("/documents/config.yaml", params={"raw_dir": str(raw_dir)})
+    response = client.delete("/documents/config.yaml", headers=AUTH)
 
     assert response.status_code == 400
-    assert (raw_dir / "config.yaml").exists()
+    assert (settings.raw_dir / "config.yaml").exists()
 
 
 def test_delete_raw_document_cannot_escape_raw_dir(tmp_path):
@@ -539,24 +521,24 @@ def test_api_history_endpoints(monkeypatch):
     monkeypatch.setattr(
         api_app,
         "list_agent_trace_history",
-        lambda limit=25: {"count": 1, "items": [{"run_id": "agent_test"}]},
+        lambda limit=25, **_dirs: {"count": 1, "items": [{"run_id": "agent_test"}]},
     )
     monkeypatch.setattr(
         api_app,
         "get_agent_trace",
-        lambda run_id: {"summary": {"run_id": run_id}, "trace": {"run_id": run_id}},
+        lambda run_id, **_dirs: {"summary": {"run_id": run_id}, "trace": {"run_id": run_id}},
     )
     monkeypatch.setattr(
         api_app,
         "list_mlops_run_history",
-        lambda limit=25: {"count": 1, "items": [{"run_id": "run_test"}]},
+        lambda limit=25, **_dirs: {"count": 1, "items": [{"run_id": "run_test"}]},
     )
     monkeypatch.setattr(
         api_app,
         "get_mlops_run",
-        lambda run_id: {"summary": {"run_id": run_id}, "run": {"run_id": run_id}},
+        lambda run_id, **_dirs: {"summary": {"run_id": run_id}, "run": {"run_id": run_id}},
     )
-    client = TestClient(create_app())
+    client = make_client()
 
     assert client.get("/history/agent-traces").json()["items"][0]["run_id"] == "agent_test"
     assert client.get("/history/agent-traces/agent_test").json()["trace"]["run_id"] == "agent_test"
@@ -577,7 +559,6 @@ def test_agent_service_passes_device_and_max_tokens(monkeypatch):
     payload = api_services.run_agent_workflow(
         AgentRunRequest(
             question="Summarize this.",
-            index_path=Path("data/processed/vector_index"),
             document_filter="doc_selected",
             llm_provider="openai_compatible",
             model_profile=None,
@@ -595,10 +576,12 @@ def test_agent_service_passes_device_and_max_tokens(monkeypatch):
             reasoning_device="cuda:1",
             reasoning_max_new_tokens=64,
             use_reasoning_planner=True,
-        )
+        ),
+        index_path=Path("data/processed/vector_index"),
     )
 
     assert payload["state"]["final_answer"] == "ok"
+    assert captured["index_path"] == Path("data/processed/vector_index")
     assert captured["device"] == "cuda:1"
     assert captured["max_new_tokens"] == 128
     assert captured["reasoning_effort"] == "none"
@@ -629,7 +612,7 @@ def test_agent_workflow_surfaces_answer_warning(monkeypatch):
 
     monkeypatch.setattr(api_services, "run_agent_from_index_path", fake_run_agent_from_index_path)
 
-    payload = api_services.run_agent_workflow(AgentRunRequest(question="Summarize this."))
+    payload = api_services.run_agent_workflow(AgentRunRequest(question="Summarize this."), index_path=Path("idx"))
 
     assert payload["answer_warning"] == "This answer was cut off. Raise Max Tokens."
 
@@ -641,7 +624,7 @@ def test_agent_workflow_answer_warning_is_none_when_not_truncated(monkeypatch):
 
     monkeypatch.setattr(api_services, "run_agent_from_index_path", fake_run_agent_from_index_path)
 
-    payload = api_services.run_agent_workflow(AgentRunRequest(question="Summarize this."))
+    payload = api_services.run_agent_workflow(AgentRunRequest(question="Summarize this."), index_path=Path("idx"))
 
     assert payload["answer_warning"] is None
 
@@ -688,7 +671,7 @@ def test_agent_request_defaults_to_second_gpu():
 
 
 def test_offline_eval_endpoint_serves_committed_snapshot():
-    client = TestClient(create_app())
+    client = make_client()
 
     response = client.get("/monitoring/offline-eval")
 
@@ -728,7 +711,7 @@ def test_generation_eval_summary_includes_full_metrics(tmp_path):
 
 
 def test_dashboard_serves_new_ui_sections():
-    client = TestClient(create_app())
+    client = make_client()
 
     dashboard = client.get("/")
 
@@ -741,14 +724,13 @@ def test_dashboard_serves_new_ui_sections():
 
 
 def test_api_rag_query_supports_keyword_rewriter(tmp_path):
-    index_path = tmp_path / "index"
-    save_test_index(index_path)
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
 
     response = client.post(
         "/rag/query",
         json={
-            "index_path": str(index_path),
             "question": "What do the platforms preserve?",
             "top_k": 1,
             "rewriter": "keywords",
@@ -803,11 +785,11 @@ def test_query_cache_lru_eviction_and_stats():
 def test_api_rag_query_uses_cache_on_repeat_and_invalidates_on_rebuild(tmp_path):
     import time as time_module
 
-    index_path = tmp_path / "index"
+    settings = make_settings(tmp_path)
+    index_path = settings.index_path()
     save_test_index(index_path)
-    client = TestClient(create_app())
+    client = make_client(settings)
     payload = {
-        "index_path": str(index_path),
         "question": "What does the platform preserve?",
         "top_k": 1,
     }
@@ -825,11 +807,10 @@ def test_api_rag_query_uses_cache_on_repeat_and_invalidates_on_rebuild(tmp_path)
 
 
 def test_api_rag_query_cache_can_be_bypassed(tmp_path):
-    index_path = tmp_path / "index"
-    save_test_index(index_path)
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
     payload = {
-        "index_path": str(index_path),
         "question": "What does the platform preserve?",
         "top_k": 1,
         "use_cache": False,
@@ -842,7 +823,7 @@ def test_api_rag_query_cache_can_be_bypassed(tmp_path):
 
 
 def test_cache_monitoring_endpoint_reports_stats():
-    client = TestClient(create_app())
+    client = make_client()
 
     response = client.get("/monitoring/cache")
 
@@ -857,7 +838,7 @@ def test_drift_monitoring_endpoint_graceful_without_baseline(tmp_path, monkeypat
     import adip.monitoring.drift as drift_module
 
     monkeypatch.setattr(drift_module, "DEFAULT_BASELINE", tmp_path / "missing.json")
-    client = TestClient(create_app())
+    client = make_client()
 
     response = client.get("/monitoring/drift")
 
@@ -872,14 +853,11 @@ def test_rag_query_appends_to_query_log(tmp_path, monkeypatch):
 
     log_path = tmp_path / "query_log.jsonl"
     monkeypatch.setattr(drift_module, "DEFAULT_QUERY_LOG", log_path)
-    index_path = tmp_path / "index"
-    save_test_index(index_path)
-    client = TestClient(create_app())
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
 
-    client.post(
-        "/rag/query",
-        json={"index_path": str(index_path), "question": "What does the platform preserve?", "top_k": 1},
-    )
+    client.post("/rag/query", json={"question": "What does the platform preserve?", "top_k": 1})
 
     lines = log_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
@@ -889,3 +867,188 @@ def test_rag_query_appends_to_query_log(tmp_path, monkeypatch):
     assert record["question"] == "What does the platform preserve?"
     assert record["top_score"] > 0
     assert record["cached"] is False
+
+
+# --- Security: server-owned paths, write protection, upload limits -----------------
+
+
+def test_api_requests_reject_client_supplied_paths(tmp_path):
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
+
+    query = client.post("/rag/query", json={"question": "q", "index_path": "/etc"})
+    agent = client.post("/agent/run", json={"question": "q", "trace_dir": str(tmp_path / "elsewhere")})
+    rebuild = client.post("/pipeline/rebuild-index", headers=AUTH, json={"input_path": "/etc"})
+
+    assert query.status_code == 422
+    assert agent.status_code == 422
+    assert rebuild.status_code == 422
+    assert not (tmp_path / "elsewhere").exists()
+
+
+def test_api_upload_ignores_client_raw_dir(tmp_path):
+    settings = make_settings(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    client = make_client(settings)
+
+    response = client.post(
+        "/documents/upload",
+        headers=AUTH,
+        data={"raw_dir": str(elsewhere)},
+        files={"file": ("note.md", b"# Note", "text/markdown")},
+    )
+
+    assert response.status_code == 200
+    assert (settings.raw_dir / "note.md").exists()
+    assert not elsewhere.exists()
+
+
+def test_api_delete_ignores_client_raw_dir(tmp_path):
+    settings = make_settings(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "victim.md").write_text("Lives outside the server's raw folder.", encoding="utf-8")
+    client = make_client(settings)
+
+    response = client.delete("/documents/victim.md", headers=AUTH, params={"raw_dir": str(elsewhere)})
+
+    assert response.status_code == 404
+    assert (elsewhere / "victim.md").exists()
+
+
+def test_api_rag_query_selects_index_by_backend_name(tmp_path):
+    settings = make_settings(tmp_path)
+    chunks = [
+        make_chunk("chunk_ingest", "The platform ingests documents and preserves source metadata."),
+        make_chunk("chunk_agent", "The agent verifies evidence before writing cited answers."),
+    ]
+    build_index(chunks, backend="tfidf").save(settings.index_path("tfidf"))
+    build_index(chunks, backend="hybrid").save(settings.index_path("hybrid"))
+    client = make_client(settings)
+
+    tfidf = client.post("/rag/query", json={"question": "What does the agent verify?", "top_k": 1})
+    hybrid = client.post(
+        "/rag/query", json={"question": "What does the agent verify?", "top_k": 1, "backend": "hybrid"}
+    )
+    missing = client.post(
+        "/rag/query", json={"question": "What does the agent verify?", "top_k": 1, "backend": "dense"}
+    )
+
+    assert tfidf.json()["backend"] == "tfidf"
+    assert hybrid.json()["backend"] == "hybrid"
+    assert missing.status_code == 404
+
+
+def test_write_endpoints_require_the_admin_token(tmp_path):
+    settings = make_settings(tmp_path)
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "keep.md").write_text("Must survive unauthenticated deletes.", encoding="utf-8")
+    client = make_client(settings)
+    upload = {"files": {"file": ("x.md", b"# x", "text/markdown")}}
+    wrong = {"Authorization": "Bearer not-the-token"}
+
+    no_token = client.post("/documents/upload", **upload)
+    bad_token = client.post("/documents/upload", headers=wrong, **upload)
+    delete = client.delete("/documents/keep.md")
+    rebuild = client.post("/pipeline/rebuild-index", json={})
+
+    assert no_token.status_code == 401
+    assert no_token.headers["www-authenticate"] == "Bearer"
+    assert "admin token" in no_token.json()["detail"]
+    assert bad_token.status_code == 403
+    assert delete.status_code == 401
+    assert rebuild.status_code == 401
+    assert not (settings.raw_dir / "x.md").exists()
+    assert (settings.raw_dir / "keep.md").exists()
+    assert not settings.index_path().exists()
+
+
+def test_write_endpoints_without_a_token_only_accept_loopback_clients(tmp_path):
+    settings = make_settings(tmp_path, admin_token=None)
+    upload = {"files": {"file": ("x.md", b"# x", "text/markdown")}}
+
+    remote = make_client(settings, client=("203.0.113.7", 50000)).post("/documents/upload", **upload)
+    local = make_client(settings, client=("127.0.0.1", 50000)).post("/documents/upload", **upload)
+
+    assert remote.status_code == 403
+    assert "ADIP_ADMIN_TOKEN" in remote.json()["detail"]
+    assert local.status_code == 200
+
+
+def test_read_endpoints_stay_open_when_a_token_is_configured(tmp_path):
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings, client=("203.0.113.7", 50000))
+
+    assert client.get("/documents").status_code == 200
+    assert client.get("/index/documents").status_code == 200
+    assert client.post("/rag/query", json={"question": "What does the platform preserve?"}).status_code == 200
+
+
+def test_health_reports_write_access_mode(tmp_path):
+    with_token = make_client(make_settings(tmp_path)).get("/health").json()
+    without = make_client(make_settings(tmp_path, admin_token=None)).get("/health").json()
+
+    assert with_token["write_access"] == "admin_token"
+    assert without["write_access"] == "local_only"
+    assert with_token["max_upload_mb"] == 20
+
+
+def test_upload_over_the_size_limit_is_rejected(tmp_path):
+    settings = make_settings(tmp_path, max_upload_bytes=1024)
+    client = make_client(settings)
+
+    response = client.post(
+        "/documents/upload",
+        headers=AUTH,
+        files={"file": ("big.md", b"x" * 2048, "text/markdown")},
+    )
+
+    assert response.status_code == 413
+    assert not (settings.raw_dir / "big.md").exists()
+
+
+def test_request_body_over_the_limit_is_rejected_before_auth(tmp_path):
+    settings = make_settings(tmp_path, max_upload_bytes=1024)
+    client = make_client(settings)
+    oversized = b"x" * (settings.max_request_bytes + 1)
+
+    response = client.post("/documents/upload", files={"file": ("big.md", oversized, "text/markdown")})
+
+    # The size middleware answers before auth runs; without it this would be a 401.
+    assert response.status_code == 413
+    assert response.json()["detail"].startswith("Request is too large")
+
+
+def test_streamed_request_body_without_content_length_is_counted(tmp_path):
+    settings = make_settings(tmp_path, max_upload_bytes=1024)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
+    question = "x" * (settings.max_request_bytes + 1)
+
+    def body():
+        yield b'{"question": "'
+        yield question.encode()
+        yield b'"}'
+
+    response = client.post("/rag/query", content=body(), headers={"Content-Type": "application/json"})
+
+    assert response.status_code == 413
+    assert response.json()["detail"].startswith("Request is too large")
+
+
+def test_api_settings_from_env():
+    settings = ApiSettings.from_env({"ADIP_ADMIN_TOKEN": "  secret  ", "ADIP_MAX_UPLOAD_MB": "5"})
+    defaults = ApiSettings.from_env({"ADIP_ADMIN_TOKEN": "   "})
+
+    assert settings.admin_token == "secret"
+    assert settings.max_upload_bytes == 5 * 1024 * 1024
+    assert defaults.admin_token is None
+    assert defaults.max_upload_bytes == 20 * 1024 * 1024
+    try:
+        ApiSettings.from_env({"ADIP_MAX_UPLOAD_MB": "lots"})
+    except ValueError as exc:
+        assert "ADIP_MAX_UPLOAD_MB" in str(exc)
+    else:
+        raise AssertionError("an invalid upload limit must be rejected")

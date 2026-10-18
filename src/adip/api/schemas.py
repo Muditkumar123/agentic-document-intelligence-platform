@@ -1,18 +1,27 @@
-"""Request schemas for the HTTP API."""
+"""Request schemas for the HTTP API.
+
+Requests never carry filesystem paths: the server owns its data layout (see
+``adip.api.settings``) and clients choose an index by backend name. Unknown
+fields are rejected, so an old client still sending ``index_path`` gets a clear
+422 instead of having the field silently ignored.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL
 
+IndexBackend = Literal["tfidf", "dense", "hybrid"]
+
 
 class RagQueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     question: str = Field(min_length=1)
-    index_path: Path = Path("data/processed/vector_index")
+    backend: IndexBackend = "tfidf"
     document_filter: str | None = None
     top_k: int = Field(default=3, ge=1)
     candidate_k: int | None = Field(default=None, ge=1)
@@ -27,8 +36,10 @@ class RagQueryRequest(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     question: str = Field(min_length=1)
-    index_path: Path = Path("data/processed/vector_index")
+    backend: IndexBackend = "tfidf"
     document_filter: str | None = None
     task: Literal["auto", "qa", "brief"] = "auto"
     domain: str = "general"
@@ -49,14 +60,12 @@ class AgentRunRequest(BaseModel):
     reasoning_device: str | None = "cuda:1"
     reasoning_max_new_tokens: int = Field(default=256, ge=1)
     use_reasoning_planner: bool = False
-    trace_dir: Path | None = Path("data/monitoring/agent_traces")
     engine: Literal["auto", "langgraph", "sequential"] = "auto"
 
 
 class RebuildIndexRequest(BaseModel):
-    input_path: Path = Path("data/raw")
-    chunks_path: Path = Path("data/processed/chunks.jsonl")
-    index_path: Path = Path("data/processed/vector_index")
+    model_config = ConfigDict(extra="forbid")
+
     chunk_size: int = Field(default=800, ge=1)
     chunk_overlap: int = Field(default=120, ge=0)
     backend: Literal["tfidf", "dense", "dense_lsa", "sentence_transformers", "hybrid"] = "tfidf"
@@ -66,7 +75,7 @@ class RebuildIndexRequest(BaseModel):
     use_faiss: bool = True
     rrf_k: int = Field(default=60, ge=1)
     hybrid_dense_weight: float = Field(default=0.5, ge=0.0, le=1.0)
-    # Also rebuild the sibling standard-backend indexes (tfidf/dense/hybrid)
+    # Also rebuild the other standard-backend indexes (tfidf/dense/hybrid)
     # from the same chunks so switching backends never hits a stale index.
     all_backends: bool = False
 

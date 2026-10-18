@@ -18,6 +18,7 @@ from adip.api.schemas import (
     RagQueryRequest,
     RebuildIndexRequest,
 )
+from adip.api.settings import INDEX_SLOTS, ApiSettings, index_slot_for_backend
 from adip.config.env import load_project_env
 from adip.config.model_profiles import load_model_profiles, profile_runtime_status
 from adip.ingestion.pipeline import ingest_path
@@ -238,7 +239,7 @@ def delete_raw_document(filename: str, raw_dir: Path = Path("data/raw")) -> dict
     return {
         "status": "deleted",
         "filename": safe_name,
-        "raw_dir": str(root),
+        "raw_dir": str(raw_dir),
         "note": "Rebuild the index to remove this document's chunks from retrieval.",
     }
 
@@ -297,14 +298,12 @@ def get_mlops_run(
     }
 
 
-def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
+def run_rag_query(request: RagQueryRequest, index_path: Path) -> dict[str, Any]:
     started = time.perf_counter()
 
     cache_key = None
     if request.use_cache:
-        cache_key = QUERY_CACHE.key_for(
-            request.model_dump(mode="json", exclude={"use_cache"}), request.index_path
-        )
+        cache_key = QUERY_CACHE.key_for(request.model_dump(mode="json", exclude={"use_cache"}), index_path)
         cached = QUERY_CACHE.get(cache_key)
         if cached is not None:
             payload = dict(cached)
@@ -317,7 +316,7 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
             )
             return payload
 
-    index = INDEX_CACHE.get(request.index_path) if request.use_cache else load_index(request.index_path)
+    index = INDEX_CACHE.get(index_path) if request.use_cache else load_index(index_path)
     candidate_k = resolve_candidate_k(request.top_k, request.candidate_k, request.reranker)
 
     variants = rewrite_question(request.question, rewriter=request.rewriter)
@@ -355,7 +354,7 @@ def run_rag_query(request: RagQueryRequest) -> dict[str, Any]:
         "question": request.question,
         "answer": answer,
         "backend": index.backend,
-        "index_path": str(request.index_path),
+        "index_path": str(index_path),
         "document_filter": request.document_filter,
         "top_k": request.top_k,
         "candidate_k": candidate_k,
@@ -393,11 +392,15 @@ def drift_summary(
     return drift_report(baseline, recent)
 
 
-def run_agent_workflow(request: AgentRunRequest) -> dict[str, Any]:
+def run_agent_workflow(
+    request: AgentRunRequest,
+    index_path: Path,
+    trace_dir: Path | None = Path("data/monitoring/agent_traces"),
+) -> dict[str, Any]:
     started = time.perf_counter()
     result = run_agent_from_index_path(
         question=request.question,
-        index_path=request.index_path,
+        index_path=index_path,
         task=request.task,
         domain_preset=request.domain,
         top_k=request.top_k,
@@ -418,7 +421,7 @@ def run_agent_workflow(request: AgentRunRequest) -> dict[str, Any]:
         reasoning_device=request.reasoning_device,
         reasoning_max_new_tokens=request.reasoning_max_new_tokens,
         use_reasoning_planner=request.use_reasoning_planner,
-        trace_dir=request.trace_dir,
+        trace_dir=trace_dir,
         engine=request.engine,
     )
     payload = result.to_dict()
@@ -481,36 +484,16 @@ def check_model_connection(request: ModelCheckRequest) -> dict[str, Any]:
     }
 
 
-STANDARD_BACKEND_SUFFIXES: dict[str, str] = {"tfidf": "", "dense": "_dense", "hybrid": "_hybrid"}
-
-
-def standard_index_paths(index_path: Path) -> dict[str, Path]:
-    """Map each standard backend to its sibling index path.
-
-    The dashboard's three indexes share a base name plus a backend suffix
-    (vector_index, vector_index_dense, vector_index_hybrid); accept any of the
-    three as input and derive the full set.
-    """
-    base = index_path.name
-    for suffix in STANDARD_BACKEND_SUFFIXES.values():
-        if suffix and base.endswith(suffix):
-            base = base[: -len(suffix)]
-            break
-    return {
-        backend: index_path.with_name(f"{base}{suffix}")
-        for backend, suffix in STANDARD_BACKEND_SUFFIXES.items()
-    }
-
-
-def rebuild_index(request: RebuildIndexRequest) -> dict[str, Any]:
+def rebuild_index(request: RebuildIndexRequest, settings: ApiSettings) -> dict[str, Any]:
+    """Re-ingest the server's raw folder and rebuild indexes at the server's index paths."""
     started = time.perf_counter()
     ingestion = ingest_path(
-        input_path=request.input_path,
-        output_path=request.chunks_path,
+        input_path=settings.raw_dir,
+        output_path=settings.chunks_path,
         chunk_size=request.chunk_size,
         chunk_overlap=request.chunk_overlap,
     )
-    chunks = read_chunks_jsonl(request.chunks_path)
+    chunks = read_chunks_jsonl(settings.chunks_path)
 
     def build_and_save(backend: str, index_path: Path) -> dict[str, Any]:
         index = build_index(
@@ -533,13 +516,13 @@ def rebuild_index(request: RebuildIndexRequest) -> dict[str, Any]:
             "vocabulary_size": index.vocabulary_size,
         }
 
-    primary = build_and_save(request.backend, request.index_path)
+    primary_slot = index_slot_for_backend(request.backend)
+    primary = build_and_save(request.backend, settings.index_path(primary_slot))
     additional: list[dict[str, Any]] = []
     if request.all_backends:
-        for backend, index_path in standard_index_paths(request.index_path).items():
-            if index_path == request.index_path:
-                continue
-            additional.append(build_and_save(backend, index_path))
+        for slot in INDEX_SLOTS:
+            if slot != primary_slot:
+                additional.append(build_and_save(slot, settings.index_path(slot)))
 
     latency_ms = (time.perf_counter() - started) * 1000
     payload = {

@@ -20,7 +20,7 @@ Check it's healthy:
 
 ```bash
 curl -fsS http://localhost:8010/health
-# {"status":"ok","service":"agentic-document-intelligence-api","version":"0.1.0"}
+# {"status":"ok","service":"agentic-document-intelligence-api","version":"0.1.0","write_access":"local_only","max_upload_mb":20.0}
 ```
 
 ## Image design
@@ -36,7 +36,7 @@ curl -fsS http://localhost:8010/health
 
 ### Render (one click, free tier)
 
-The repo includes a [`render.yaml`](../render.yaml) blueprint. In the Render dashboard: **New + → Blueprint** → point it at this repo. Render builds the Dockerfile, injects `$PORT`, and health-checks `/health`. `autoDeploy` redeploys on every push to `main`.
+The repo includes a [`render.yaml`](../render.yaml) blueprint. In the Render dashboard: **New + → Blueprint** → point it at this repo. Render builds the Dockerfile, injects `$PORT`, health-checks `/health`, and generates a random `ADIP_ADMIN_TOKEN`. `autoDeploy` redeploys on every push to `main`. Copy the token from the service's **Environment** page into the dashboard's Admin Token field to upload, delete, or rebuild; visitors without it can still query and run the agent.
 
 The production instance is live at **https://agentic-document-intelligence.onrender.com** (free tier: spins down after ~15 minutes idle; the first request after that takes up to a minute).
 
@@ -54,6 +54,8 @@ Point it at `infra/docker/Dockerfile`, expose the port the platform provides via
 ## Configuration
 
 - `PORT` — port to bind (default `8010`).
+- `ADIP_ADMIN_TOKEN` — bearer token for the write endpoints (upload, delete, rebuild). Without it those endpoints refuse every request that doesn't come from loopback, which inside a container means every request. See the security model in [API.md](API.md#security-model).
+- `ADIP_MAX_UPLOAD_MB` — largest accepted document upload (default `20`).
 - Hosted-LLM writers (Gemini/DeepSeek/Groq) are optional and **session-only**: API keys are supplied per request from the dashboard and never written to disk or baked into the image. The default extractive writer needs no keys.
 
 ## Persistence (optional)

@@ -9,11 +9,15 @@ from adip.rag.chunks import read_chunks_jsonl
 from adip.rag.evaluate import aggregate_by_category, evaluate, read_golden
 from adip.rag.rerank import rerank_results, resolve_candidate_k
 from adip.rag.retriever import (
+    INDEX_FILENAME,
+    LEGACY_PICKLE_FILENAME,
+    LegacyIndexFormatError,
     build_index,
     load_index,
     matches_document_filter,
     reciprocal_rank_fusion,
 )
+from adip.rag.serialization import IndexFormatError, decode_json, encode_json, read_npz, write_npz_atomic
 
 
 def make_chunk(chunk_id, text):
@@ -608,3 +612,107 @@ def test_evaluate_with_rewriter_reports_rewriter_metadata(tmp_path):
 
     assert report["rewriter"] == "keywords"
     assert report["hit_rate_at_k"] == 1.0
+
+
+INDEX_FORMAT_CHUNKS = [
+    ("chunk_ingest", "The platform ingests documents and preserves source metadata for citations."),
+    ("chunk_agent", "The agent verifies evidence before writing cited answers to questions."),
+    ("chunk_gdpr", "GDPR article 17 gives the right to erasure, also known as the right to be forgotten."),
+    ("chunk_tls", "TLS 1.3 removes legacy cipher suites and shortens the handshake."),
+    ("chunk_bm25", "BM25 ranks documents by term frequency with document length normalization."),
+]
+INDEX_FORMAT_QUESTIONS = [
+    "What does the agent verify?",
+    "right to be forgotten",
+    "How is the handshake faster?",
+    "length normalization in ranking",
+]
+
+
+@pytest.mark.parametrize("backend", ["tfidf", "dense", "hybrid"])
+def test_saved_index_round_trips_with_identical_search_results(tmp_path, backend):
+    chunks = [make_chunk(chunk_id, text) for chunk_id, text in INDEX_FORMAT_CHUNKS]
+    index = build_index(chunks, backend=backend, dense_dimensions=3, use_faiss=False)
+    index.save(tmp_path / "index")
+
+    loaded = load_index(tmp_path / "index")
+
+    assert loaded.backend == index.backend
+    assert loaded.chunks == index.chunks
+    for question in INDEX_FORMAT_QUESTIONS:
+        before = [(item.chunk["chunk_id"], item.score) for item in index.search(question, top_k=5)]
+        after = [(item.chunk["chunk_id"], item.score) for item in loaded.search(question, top_k=5)]
+        assert [chunk_id for chunk_id, _ in after] == [chunk_id for chunk_id, _ in before]
+        assert np.allclose([score for _, score in after], [score for _, score in before])
+
+
+def test_saved_index_is_a_pickle_free_archive(tmp_path):
+    build_index([make_chunk("c1", "Plain data only, no pickled objects.")]).save(tmp_path / "index")
+
+    files = sorted(path.name for path in (tmp_path / "index").iterdir())
+    with np.load(tmp_path / "index" / INDEX_FILENAME, allow_pickle=False) as archive:
+        manifest = decode_json(archive["manifest"])
+
+    assert files == [INDEX_FILENAME]
+    assert manifest["format"] == "adip-rag-index"
+    assert manifest["backend"] == "tfidf"
+
+
+def test_load_index_refuses_legacy_pickle_without_unpickling(tmp_path):
+    import pickle
+
+    marker = tmp_path / "pickle_payload_ran"
+
+    class Payload:
+        def __reduce__(self):
+            return (marker.write_text, ("unpickled",))
+
+    index_dir = tmp_path / "index"
+    index_dir.mkdir()
+    (index_dir / LEGACY_PICKLE_FILENAME).write_bytes(pickle.dumps(Payload()))
+
+    with pytest.raises(LegacyIndexFormatError, match="Rebuild the index"):
+        load_index(index_dir)
+    assert not marker.exists()
+
+
+def test_load_index_refuses_pickle_saved_under_the_new_filename(tmp_path):
+    import pickle
+
+    marker = tmp_path / "pickle_payload_ran"
+
+    class Payload:
+        def __reduce__(self):
+            return (marker.write_text, ("unpickled",))
+
+    index_dir = tmp_path / "index"
+    index_dir.mkdir()
+    (index_dir / INDEX_FILENAME).write_bytes(pickle.dumps(Payload()))
+
+    with pytest.raises(IndexFormatError):
+        load_index(index_dir)
+    assert not marker.exists()
+
+
+def test_saving_an_index_removes_a_legacy_pickle(tmp_path):
+    index_dir = tmp_path / "index"
+    index_dir.mkdir()
+    (index_dir / LEGACY_PICKLE_FILENAME).write_bytes(b"old")
+
+    build_index([make_chunk("c1", "Fresh archive replaces the old pickle.")]).save(index_dir)
+
+    assert not (index_dir / LEGACY_PICKLE_FILENAME).exists()
+    assert load_index(index_dir).chunks[0]["chunk_id"] == "c1"
+
+
+def test_load_index_rejects_unknown_format_version(tmp_path):
+    index_dir = tmp_path / "index"
+    build_index([make_chunk("c1", "Versioned archive.")]).save(index_dir)
+    arrays = read_npz(index_dir / INDEX_FILENAME)
+    manifest = decode_json(arrays["manifest"])
+    manifest["format_version"] = 999
+    arrays["manifest"] = encode_json(manifest)
+    write_npz_atomic(index_dir / INDEX_FILENAME, arrays)
+
+    with pytest.raises(IndexFormatError, match="rebuild the index"):
+        load_index(index_dir)

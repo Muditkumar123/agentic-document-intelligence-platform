@@ -38,6 +38,15 @@ Health check:
 curl http://127.0.0.1:8010/health
 ```
 
+## Security Model
+
+- **The server owns every path.** Requests never carry filesystem paths. Documents live in `data/raw/`, chunks in `data/processed/chunks.jsonl`, and the three indexes in `data/processed/vector_index{,_dense,_hybrid}`; clients pick an index by `backend` name (`tfidf`, `dense`, `hybrid`). Request bodies reject unknown fields, so an old client that still sends `index_path` gets a 422 instead of having it silently ignored.
+- **Write endpoints need the admin token.** Upload, delete, and rebuild change what every user sees. With `ADIP_ADMIN_TOKEN` set on the server they require `Authorization: Bearer <token>` (401 without it, 403 with a wrong one). With no token set they only accept loopback clients, so a laptop dev server works with no setup while any network-exposed deployment fails closed. Behind a reverse proxy, set a token rather than relying on loopback mode. Read endpoints (query, agent run, listings, monitoring) stay open. `/health` reports the mode as `write_access` (`admin_token` or `local_only`).
+- **Uploads are size-limited.** `ADIP_MAX_UPLOAD_MB` (default 20) caps each document. Oversized requests are refused with 413 before the body is buffered, using the declared `Content-Length` or, for chunked uploads, a running byte count.
+- **Indexes are stored without pickle.** Each index is one `rag_index.npz` archive (numeric arrays plus a JSON manifest) loaded with `allow_pickle=False`, so loading an index cannot run code. An old `rag_index.pkl` is refused with a "rebuild the index" message rather than unpickled.
+
+Generate a token with `python -c "import secrets; print(secrets.token_urlsafe(32))"`, put it in `.env` (or the host's environment), and enter it in the dashboard's **Documents → Admin Token** field. The dashboard keeps it in memory only and sends it with each write request.
+
 ## Dashboard
 
 The dashboard is served by the FastAPI app and calls the same HTTP endpoints as external clients.
@@ -49,7 +58,7 @@ It includes:
 - Agent run form with task, domain, writer model, reasoning model, custom model entry, GPU device, API key, endpoint, and token controls.
 - **Agent trace stepper**: each LangGraph node as an expandable card with status, a duration bar, and state summaries, plus an engine badge (`langgraph` / `sequential`).
 - **Evaluation tab**: deterministic CI-gated metrics with their floors, the retrieval benchmark, and the committed offline judge + RAGAS snapshot with agreement panels ("three scorers, one story").
-- Document upload and index rebuild form (all backends).
+- Document upload and index rebuild form (all backends), with an Admin Token field for the write endpoints.
 - Run history browser for AgentOps traces and MLOps runs.
 - Answer, quality, citation, latency, export, and raw JSON panes.
 - A cold-start banner for free-tier hosting: the page polls `/health` while the instance wakes and unlocks automatically.
@@ -72,7 +81,7 @@ For hosted DeepSeek API demos, either configure `.env` first or paste a session-
 curl -X POST http://127.0.0.1:8010/rag/query \
   -H "Content-Type: application/json" \
   -d '{
-    "index_path": "data/processed/vector_index",
+    "backend": "tfidf",
     "question": "What does the platform do with documents?",
     "top_k": 3,
     "candidate_k": 10,
@@ -80,7 +89,7 @@ curl -X POST http://127.0.0.1:8010/rag/query \
   }'
 ```
 
-The response includes the cited answer, retrieved chunks, backend metadata, reranker metadata, quality metrics, and latency.
+`backend` selects the index (`tfidf`, `dense`, or `hybrid`; default `tfidf`). The response includes the cited answer, retrieved chunks, backend metadata, reranker metadata, quality metrics, and latency.
 
 ## Run The Agent
 
@@ -88,7 +97,7 @@ The response includes the cited answer, retrieved chunks, backend metadata, rera
 curl -X POST http://127.0.0.1:8010/agent/run \
   -H "Content-Type: application/json" \
   -d '{
-    "index_path": "data/processed/vector_index",
+    "backend": "tfidf",
     "question": "Create a research brief about the document intelligence platform.",
     "task": "brief",
     "domain": "academic",
@@ -111,48 +120,47 @@ curl http://127.0.0.1:8010/model-profiles
 
 ```bash
 curl -X POST http://127.0.0.1:8010/documents/upload \
-  -F "raw_dir=data/raw" \
+  -H "Authorization: Bearer $ADIP_ADMIN_TOKEN" \
   -F "file=@/path/to/document.pdf"
 ```
 
-Supported upload types are `.pdf`, `.md`, and `.txt`. After upload, rebuild the index before querying the new document.
+Supported upload types are `.pdf`, `.md`, and `.txt`, up to `ADIP_MAX_UPLOAD_MB` (default 20 MB). Files are saved to the server's `data/raw/`. After upload, rebuild the index before querying the new document.
 
 ## List Documents
 
 ```bash
-curl "http://127.0.0.1:8010/documents?raw_dir=data/raw&index_path=data/processed/vector_index"
+curl http://127.0.0.1:8010/documents
 ```
 
-Lists the supported documents in the raw folder with size, modified time, and an `indexed` flag per file. The response also reports `indexed_but_deleted` (documents still in the index whose raw file is gone) and `index_stale` (true when the raw folder and the index disagree), which the dashboard uses to prompt a rebuild.
+Lists the supported documents in the server's raw folder with size, modified time, and an `indexed` flag per file. The response also reports `indexed_but_deleted` (documents still in the index whose raw file is gone) and `index_stale` (true when the raw folder and the index disagree), which the dashboard uses to prompt a rebuild.
 
 ## Delete A Document
 
 ```bash
-curl -X DELETE "http://127.0.0.1:8010/documents/report.pdf?raw_dir=data/raw"
+curl -X DELETE http://127.0.0.1:8010/documents/report.pdf \
+  -H "Authorization: Bearer $ADIP_ADMIN_TOKEN"
 ```
 
-Deletes one document from the raw folder. Filenames are sanitized so they cannot escape the raw directory, and only supported document types can be deleted. The index keeps serving the deleted document's chunks until the next rebuild, so the dashboard shows a stale-index hint until you click Rebuild Index.
+Deletes one document from the server's raw folder. Filenames are sanitized so they cannot escape the raw directory, and only supported document types can be deleted. The index keeps serving the deleted document's chunks until the next rebuild, so the dashboard shows a stale-index hint until you click Rebuild Index.
 
 ## Rebuild The Index
 
 ```bash
 curl -X POST http://127.0.0.1:8010/pipeline/rebuild-index \
+  -H "Authorization: Bearer $ADIP_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "input_path": "data/raw",
-    "chunks_path": "data/processed/chunks.jsonl",
-    "index_path": "data/processed/vector_index",
     "backend": "tfidf",
     "chunk_size": 800,
     "chunk_overlap": 120
   }'
 ```
 
-This endpoint runs ingestion and index building in one call. It is useful for demos and local iteration; production deployments should usually run this as a tracked MLOps job.
+This endpoint re-ingests the server's `data/raw/` folder and rebuilds the index in one call. It is useful for demos and local iteration; production deployments should usually run this as a tracked MLOps job.
 
 `backend` accepts `tfidf`, `dense`, `dense_lsa`, `sentence_transformers`, or `hybrid`. The hybrid backend fuses BM25 and dense rankings with weighted reciprocal-rank fusion and honors two optional fields: `rrf_k` (default 60) and `hybrid_dense_weight` (0–1, default 0.5; BM25 gets the remainder).
 
-`all_backends: true` additionally rebuilds the sibling standard-backend indexes from the same chunks — given any of `vector_index`, `vector_index_dense`, or `vector_index_hybrid` as `index_path`, all three are written. The dashboard's Rebuild Index button sends this flag so switching retrieval backends never hits an index missing recently uploaded documents; the extra builds are listed under `additional_indexes` in the response.
+`backend` decides which index directory is written: `tfidf` → `vector_index`, `dense`/`dense_lsa`/`sentence_transformers` → `vector_index_dense`, `hybrid` → `vector_index_hybrid`. `all_backends: true` additionally rebuilds the other two standard indexes from the same chunks. The dashboard's Rebuild Index button sends this flag so switching retrieval backends never hits an index missing recently uploaded documents; the extra builds are listed under `additional_indexes` in the response.
 
 On `/rag/query`, `document_filter` restricts retrieval to one document. It matches the document id, filename, or source path — exactly first, then as a case-insensitive partial name (`"gennet"` selects `GenNet.pdf`). A filter that matches nothing returns an explicit "does not match any document" answer listing the indexed filenames, rather than a generic no-evidence abstention.
 
@@ -170,7 +178,7 @@ This returns the current retrieval benchmark headline metrics for the dashboard.
 curl http://127.0.0.1:8010/monitoring/cache
 ```
 
-Reports hit/miss statistics for the two in-process caches: the **index cache** (loaded indexes keyed by pickle mtime, so a rebuild invalidates naturally — no explicit invalidation hooks to forget) and the **query cache** (bounded LRU over full `/rag/query` responses, keyed by request payload + index mtime). Cached responses carry `"cached": true` and skip retrieval entirely (~30x faster on repeats); pass `"use_cache": false` in the query request to bypass. This is deliberately single-process (works on the free hosting tier, vanishes on restart); Redis is the documented upgrade path for multi-instance deployments.
+Reports hit/miss statistics for the two in-process caches: the **index cache** (loaded indexes keyed by index file mtime, so a rebuild invalidates naturally — no explicit invalidation hooks to forget) and the **query cache** (bounded LRU over full `/rag/query` responses, keyed by request payload + index mtime). Cached responses carry `"cached": true` and skip retrieval entirely (~30x faster on repeats); pass `"use_cache": false` in the query request to bypass. This is deliberately single-process (works on the free hosting tier, vanishes on restart); Redis is the documented upgrade path for multi-instance deployments.
 
 ## Drift Monitoring
 

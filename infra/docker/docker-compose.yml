@@ -11,6 +11,11 @@ services:
       - "8010:8010"
     environment:
       - PORT=8010
+      # Upload/delete/rebuild need an admin token; without one they are refused, because
+      # requests from the host reach the container from the Docker network, not loopback.
+      # Enable them with: ADIP_ADMIN_TOKEN=<token> docker compose ... up
+      - ADIP_ADMIN_TOKEN=${ADIP_ADMIN_TOKEN:-}
+      - ADIP_MAX_UPLOAD_MB=${ADIP_MAX_UPLOAD_MB:-20}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8010/health"]

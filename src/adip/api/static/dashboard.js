@@ -51,10 +51,7 @@ function bindForms() {
     }
     await runRequest(event.currentTarget, "/rag/query", buildRagPayload(), renderRagResult);
   });
-  $("ragBackend").addEventListener("change", () => {
-    $("ragIndexPath").value = indexPathForBackend($("ragBackend").value);
-    refreshIndexedDocuments();
-  });
+  $("ragBackend").addEventListener("change", () => refreshIndexedDocuments());
   $("refreshEval").addEventListener("click", () => loadEvaluation());
 
   $("agentForm").addEventListener("submit", async (event) => {
@@ -64,7 +61,13 @@ function bindForms() {
 
   $("indexForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await runRequest(event.currentTarget, "/pipeline/rebuild-index", buildIndexPayload(), renderIndexResult);
+    await runRequest(
+      event.currentTarget,
+      "/pipeline/rebuild-index",
+      buildIndexPayload(),
+      renderIndexResult,
+      adminHeaders(),
+    );
   });
 
   $("refreshAgentHistory").addEventListener("click", () => loadAgentHistory());
@@ -76,20 +79,33 @@ function bindForms() {
   $("agentEndpointUrl").addEventListener("input", () => renderApiKeyStatus());
   $("addCustomModel").addEventListener("click", () => addCustomModel());
   $("testCustomModel").addEventListener("click", () => testCustomModel());
-  $("ragIndexPath").addEventListener("change", () => refreshIndexedDocuments());
-  $("agentIndexPath").addEventListener("change", () => refreshIndexedDocuments());
-  $("indexPath").addEventListener("change", () => {
-    refreshIndexedDocuments();
-    refreshRawDocuments();
-  });
   $("refreshRawDocs").addEventListener("click", () => refreshRawDocuments());
-  $("inputPath").addEventListener("change", () => refreshRawDocuments());
+}
+
+// Write endpoints (upload, delete, rebuild) need the server's admin token. It is
+// kept only in the input field: sent per request, never written to browser storage.
+function adminHeaders() {
+  const token = $("adminToken").value.trim();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function renderWriteAccessHint(payload) {
+  const hint = $("adminTokenHint");
+  if (!hint || !payload || !payload.write_access) {
+    return;
+  }
+  const limit = payload.max_upload_mb ? ` Uploads are limited to ${payload.max_upload_mb} MB.` : "";
+  hint.textContent =
+    payload.write_access === "admin_token"
+      ? `This server needs its admin token to upload, delete, or rebuild. It is sent with each request and never stored.${limit}`
+      : `No admin token is set on this server, so upload, delete, and rebuild only work from the machine running it.${limit}`;
 }
 
 async function refreshHealth() {
   const status = $("serviceStatus");
   try {
     const payload = await getJson("/health");
+    renderWriteAccessHint(payload);
     status.textContent = payload.status === "ok" ? "Online" : "Check";
     status.classList.toggle("ok", payload.status === "ok");
     status.classList.remove("error");
@@ -130,7 +146,7 @@ async function refreshGenerationEval() {
   }
 }
 
-async function runRequest(form, path, payload, renderer) {
+async function runRequest(form, path, payload, renderer, headers = {}) {
   const button = form.querySelector("button[type='submit']");
   const originalText = button.innerHTML;
   button.disabled = true;
@@ -138,7 +154,7 @@ async function runRequest(form, path, payload, renderer) {
   setResultTitle("Running");
 
   try {
-    const result = await postJson(path, payload);
+    const result = await postJson(path, payload, headers);
     renderer(result);
   } catch (error) {
     renderError(error);
@@ -153,7 +169,7 @@ function buildRagPayload() {
   const documentFilter = $("ragDocumentFilter").value.trim();
   return {
     question: $("ragQuestion").value.trim(),
-    index_path: $("ragIndexPath").value.trim(),
+    backend: $("ragBackend").value,
     document_filter: documentFilter || null,
     top_k: Number($("ragTopK").value),
     candidate_k: Number($("ragCandidateK").value),
@@ -171,7 +187,7 @@ function buildAgentPayload() {
   const documentFilter = $("agentDocumentFilter").value.trim();
   return {
     question: $("agentQuestion").value.trim(),
-    index_path: $("agentIndexPath").value.trim(),
+    backend: $("agentBackend").value,
     document_filter: documentFilter || null,
     task: $("agentTask").value,
     domain: $("agentDomain").value,
@@ -251,9 +267,8 @@ async function refreshModelProfiles() {
 }
 
 async function refreshIndexedDocuments(preferredFilename) {
-  const indexPath = $("indexPath").value.trim() || $("agentIndexPath").value.trim() || "data/processed/vector_index";
   try {
-    const payload = await getJson(`/index/documents?index_path=${encodeURIComponent(indexPath)}`);
+    const payload = await getJson(`/index/documents?backend=${encodeURIComponent($("ragBackend").value)}`);
     state.indexedDocuments = payload.items || [];
     populateDocumentSelect($("ragDocumentFilter"), state.indexedDocuments, preferredFilename);
     populateDocumentSelect($("agentDocumentFilter"), state.indexedDocuments, preferredFilename);
@@ -266,12 +281,8 @@ async function refreshIndexedDocuments(preferredFilename) {
 }
 
 async function refreshRawDocuments() {
-  const rawDir = $("inputPath").value.trim() || "data/raw";
-  const indexPath = $("indexPath").value.trim() || "data/processed/vector_index";
   try {
-    const payload = await getJson(
-      `/documents?raw_dir=${encodeURIComponent(rawDir)}&index_path=${encodeURIComponent(indexPath)}`,
-    );
+    const payload = await getJson("/documents");
     renderRawDocuments(payload);
   } catch (error) {
     console.warn(error);
@@ -315,12 +326,11 @@ async function deleteRawDocument(filename) {
   if (!confirmed) {
     return;
   }
-  const rawDir = $("inputPath").value.trim() || "data/raw";
   try {
-    const response = await fetch(
-      `/documents/${encodeURIComponent(filename)}?raw_dir=${encodeURIComponent(rawDir)}`,
-      { method: "DELETE" },
-    );
+    const response = await fetch(`/documents/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+      headers: adminHeaders(),
+    });
     const payload = await parseResponse(response);
     setResultTitle("Document Delete");
     setLatency(null);
@@ -655,9 +665,6 @@ function modelRuntimeStatus(label, profile) {
 
 function buildIndexPayload() {
   return {
-    input_path: $("inputPath").value.trim(),
-    chunks_path: $("chunksPath").value.trim(),
-    index_path: $("indexPath").value.trim(),
     backend: $("indexBackend").value,
     chunk_size: Number($("chunkSize").value),
     chunk_overlap: Number($("chunkOverlap").value),
@@ -742,13 +749,13 @@ async function uploadDocument(rebuildAfterUpload) {
 
   const formData = new FormData();
   formData.append("file", fileInput.files[0]);
-  formData.append("raw_dir", $("inputPath").value.trim() || "data/raw");
   setResultTitle(rebuildAfterUpload ? "Uploading and Rebuilding" : "Uploading");
   setLatency(null);
 
   try {
     const response = await fetch("/documents/upload", {
       method: "POST",
+      headers: adminHeaders(),
       body: formData,
     });
     const uploadPayload = await parseResponse(response);
@@ -756,7 +763,7 @@ async function uploadDocument(rebuildAfterUpload) {
       renderUploadResult(uploadPayload);
       return;
     }
-    const rebuildPayload = await postJson("/pipeline/rebuild-index", buildIndexPayload());
+    const rebuildPayload = await postJson("/pipeline/rebuild-index", buildIndexPayload(), adminHeaders());
     renderUploadRebuildResult(uploadPayload, rebuildPayload);
   } catch (error) {
     renderError(error);
@@ -1076,10 +1083,10 @@ async function getJson(path) {
   return parseResponse(response);
 }
 
-async function postJson(path, payload) {
+async function postJson(path, payload, headers = {}) {
   const response = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(payload),
   });
   return parseResponse(response);
@@ -1459,20 +1466,11 @@ function setActionsDisabled(disabled) {
 // Retrieval backend comparison: fire the same question at the tfidf, dense, and
 // hybrid indexes in parallel and render the ranked lists side by side.
 
-const INDEX_PATH_BY_BACKEND = {
-  tfidf: "data/processed/vector_index",
-  dense: "data/processed/vector_index_dense",
-  hybrid: "data/processed/vector_index_hybrid",
-};
 const BACKEND_LABELS = {
   tfidf: "TF-IDF (sparse)",
   dense: "Dense LSA (semantic)",
   hybrid: "Hybrid (BM25 + dense)",
 };
-
-function indexPathForBackend(backend) {
-  return INDEX_PATH_BY_BACKEND[backend] || INDEX_PATH_BY_BACKEND.tfidf;
-}
 
 async function runBackendComparison(form) {
   const button = form.querySelector("button[type='submit']");
@@ -1488,10 +1486,7 @@ async function runBackendComparison(form) {
     const results = await Promise.all(
       backends.map(async (backend) => {
         try {
-          const payload = await postJson("/rag/query", {
-            ...base,
-            index_path: indexPathForBackend(backend),
-          });
+          const payload = await postJson("/rag/query", { ...base, backend });
           return { backend, payload };
         } catch (error) {
           return { backend, error };
