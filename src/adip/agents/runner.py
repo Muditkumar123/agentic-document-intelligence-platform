@@ -12,6 +12,7 @@ from adip.agents.graph import AgentRoutes, langgraph_available, run_agent_graph
 from adip.agents.models import (
     DEFAULT_MAX_RETRIEVAL_CALLS,
     DEFAULT_MAX_RETRIEVAL_RETRIES,
+    DEFAULT_RETRIEVAL_TIME_BUDGET_MS,
     AgentResult,
     AgentState,
     TraceEvent,
@@ -94,6 +95,7 @@ def run_agent_from_index_path(
     decomposer: str = "rules",
     max_retrieval_retries: int = DEFAULT_MAX_RETRIEVAL_RETRIES,
     max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS,
+    retrieval_time_budget_ms: float = DEFAULT_RETRIEVAL_TIME_BUDGET_MS,
     coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD,
 ) -> AgentResult:
     index = load_index(index_path)
@@ -130,6 +132,7 @@ def run_agent_from_index_path(
         decomposer=decomposer,
         max_retrieval_retries=max_retrieval_retries,
         max_retrieval_calls=max_retrieval_calls,
+        retrieval_time_budget_ms=retrieval_time_budget_ms,
         coverage_threshold=coverage_threshold,
     )
 
@@ -168,6 +171,7 @@ def run_agent(
     decomposer: str = "rules",
     max_retrieval_retries: int = DEFAULT_MAX_RETRIEVAL_RETRIES,
     max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS,
+    retrieval_time_budget_ms: float = DEFAULT_RETRIEVAL_TIME_BUDGET_MS,
     coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD,
     routes: AgentRoutes | None = None,
 ) -> AgentResult:
@@ -175,6 +179,10 @@ def run_agent(
         raise ValueError("top_k must be greater than 0")
     if max_retrieval_retries < 0:
         raise ValueError("max_retrieval_retries must be 0 or greater")
+    if max_retrieval_calls < 0:
+        raise ValueError("max_retrieval_calls must be 0 or greater")
+    if retrieval_time_budget_ms < 0:
+        raise ValueError("retrieval_time_budget_ms must be 0 or greater")
     routes = DEFAULT_ROUTES if routes is None else routes
     resolved_engine = resolve_engine(engine)
 
@@ -208,6 +216,7 @@ def run_agent(
         decomposer=decomposer,
         max_retrieval_retries=max_retrieval_retries,
         max_retrieval_calls=max_retrieval_calls,
+        retrieval_time_budget_ms=retrieval_time_budget_ms,
         coverage_threshold=coverage_threshold,
         metrics={
             "index_backend": index.backend,
@@ -226,6 +235,9 @@ def run_agent(
             "use_reasoning_planner": use_reasoning_planner,
             "workflow_engine": resolved_engine,
             "max_retrieval_retries": max_retrieval_retries,
+            "max_retrieval_calls": max_retrieval_calls,
+            "retrieval_time_budget_ms": retrieval_time_budget_ms,
+            "coverage_threshold": coverage_threshold,
         },
     )
 
@@ -323,6 +335,8 @@ def summarize_state(state: AgentState) -> dict[str, object]:
         "retrieved_count": len(state.retrieved),
         "sub_question_count": len(state.sub_questions),
         "retrieval_round_count": state.metrics.get("retrieval_round_count", 0),
+        "retrieval_call_count": state.metrics.get("retrieval_call_count", 0),
+        "retrieval_retry_count": len(state.retrieval_retries),
         "pending_query_count": len(state.pending_queries),
         "citation_count": len(state.citations),
         "verification_note_count": len(state.verification_notes),

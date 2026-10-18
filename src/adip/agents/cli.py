@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+from adip.agents.models import DEFAULT_MAX_RETRIEVAL_CALLS, DEFAULT_RETRIEVAL_TIME_BUDGET_MS
 from adip.agents.runner import run_agent_from_index_path
 
 
@@ -102,6 +103,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=2,
         help="Follow-up search rounds the verifier may start when evidence does not cover the question (0 disables).",
     )
+    parser.add_argument(
+        "--max-retrieval-calls",
+        type=int,
+        default=DEFAULT_MAX_RETRIEVAL_CALLS,
+        help="Searches per run, first round included; follow-up rounds never go past it.",
+    )
+    parser.add_argument(
+        "--retrieval-time-budget-ms",
+        type=float,
+        default=DEFAULT_RETRIEVAL_TIME_BUDGET_MS,
+        help="Retrieval wall-clock time after which no further follow-up round is started.",
+    )
     parser.add_argument("--json", action="store_true", help="Print full JSON output.")
     return parser
 
@@ -138,6 +151,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         engine=args.engine,
         decomposer=args.decomposer,
         max_retrieval_retries=args.max_retrieval_retries,
+        max_retrieval_calls=args.max_retrieval_calls,
+        retrieval_time_budget_ms=args.retrieval_time_budget_ms,
     )
 
     payload = result.to_dict()

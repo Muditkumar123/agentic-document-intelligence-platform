@@ -163,7 +163,9 @@ Final Response
 
 **Coverage-driven follow-ups.** For each (sub-)question the verifier finds the retrieved passage covering the most of its content terms, weighted by IDF (`adip/rag/coverage.py`). Below the coverage threshold, and only if a *specific* term is missing (rare in the corpus, or a name/acronym in the question), the missing terms become a follow-up search. A follow-up is kept only if its best passage actually contains those terms, so a fruitless search adds nothing. The threshold (0.3) was fixed by a rule set before measuring: the 10th percentile of best-passage coverage over 67 single-hop questions.
 
-**Budgets.** `max_retrieval_retries` (default 2), `max_retrieval_calls` (8), and a retrieval time budget stop the loop; the stop reason is recorded in the trace. The optional LLM verifier runs once, on the final evidence.
+**Retry records.** Each follow-up round adds an entry to `retrieval_retries` with its round number and, for every search it starts, the query, the (sub-)question it serves, and why it runs (for example `sub-question 2 coverage 0.21 below 0.30, missing dns, label`). The verifier rebuilds its notes each round, so this list is the durable record of why the run went back to retrieval. Every AgentOps trace event summarizes `retrieval_round_count`, `retrieval_call_count`, `retrieval_retry_count` and `pending_query_count`, so a trace shows which verifier step sent the run back and what the next retriever ran.
+
+**Budgets.** Three per-run caps stop the loop: `max_retrieval_retries` (default 2 follow-up rounds), `max_retrieval_calls` (8 searches), and `retrieval_time_budget_ms` (10 s of retrieval wall-clock, checked before each follow-up round). The caps and what the run used (`retrieval_round_count`, `retrieval_call_count`, `retrieval_retry_count`, `retrieval_elapsed_ms`) are in the run's metrics, and `retrieval_stop_reason` names the cap when one ended the loop. There is no token budget because the loop itself calls no model: the optional LLM decomposer, the optional LLM verifier (on the final evidence) and the writer each run once per question, however many rounds there are. As a backstop, the sequential engine stops after a step count derived from the retry cap, and the LangGraph engine has a recursion limit.
 
 **Engines.** The workflow runs on two interchangeable engines behind one definition: a real **LangGraph `StateGraph`** (default when the `[agents]` extra is installed) and a dependency-light sequential runner. Both read the same node list and the same router table: failure routes to `END`, and the verifier's router chooses `retriever` or `writer`. They share the same node functions, the same `AgentState`, and the same tracing wrapper, so AgentOps traces are identical (a retried run shows `retriever` and `evidence_verifier` twice), and every trace records which engine produced it (`workflow_engine`).
 
@@ -179,6 +181,7 @@ document_ids
 sub_questions
 retrieval_streams      every search: query, reason, round, accepted, chunk ids
 sub_question_support   coverage, missing terms, follow-up terms per (sub-)question
+retrieval_retries      every follow-up round: round, queries, and why each one ran
 retrieved_chunks
 evidence_summary
 draft_answer

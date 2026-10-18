@@ -72,6 +72,8 @@ class AgentState:
     retrieval_streams: list[dict[str, Any]] = field(default_factory=list)
     evidence_pool: dict[str, dict[str, Any]] = field(default_factory=dict)
     sub_question_support: list[dict[str, Any]] = field(default_factory=list)
+    # One entry per follow-up round: why the verifier sent the run back to retrieval.
+    retrieval_retries: list[dict[str, Any]] = field(default_factory=list)
     retrieval_elapsed_ms: float = 0.0
     plan: list[str] = field(default_factory=list)
     planning_notes: list[str] = field(default_factory=list)

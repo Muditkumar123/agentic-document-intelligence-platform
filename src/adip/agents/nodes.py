@@ -218,6 +218,7 @@ def retrieve_evidence(state: AgentState, index: RagIndex) -> AgentState:
     state.metrics["document_filter"] = state.document_filter
     state.metrics["retrieval_round_count"] = round_number
     state.metrics["retrieval_call_count"] = int(state.metrics.get("retrieval_call_count", 0)) + len(queries)
+    state.metrics["retrieval_elapsed_ms"] = state.retrieval_elapsed_ms
     return state
 
 
@@ -269,6 +270,7 @@ def verify_evidence(state: AgentState, index: RagIndex) -> AgentState:
     state.metrics["unique_document_count"] = len(unique_documents)
     state.metrics["low_score_count"] = low_score_count
     schedule_follow_up_searches(state, index)
+    state.metrics["retrieval_retry_count"] = len(state.retrieval_retries)
     state.metrics["reasoning_verifier_enabled"] = bool(
         state.reasoning_provider or state.reasoning_model_name or state.reasoning_model_profile
     )
@@ -340,12 +342,17 @@ def schedule_follow_up_searches(state: AgentState, index: RagIndex) -> None:
         support.append({"index": position, "sub_question": sub_question, "supported": supported, **result.to_dict()})
         query = " ".join(result.follow_up_terms)
         if not supported and query and (position, query) not in issued:
+            label = "question" if len(sub_questions) == 1 else f"sub-question {position + 1}"
             follow_ups.append(
                 {
                     "query": query,
                     "sub_question_index": position,
                     "reason": "follow_up",
                     "follow_up_terms": result.follow_up_terms,
+                    "retry_reason": (
+                        f"{label} coverage {result.coverage:.2f} below {state.coverage_threshold:.2f}, "
+                        f"missing {', '.join(result.specific_missing_terms[:5])}"
+                    ),
                 }
             )
     state.sub_question_support = support
@@ -374,8 +381,22 @@ def schedule_follow_up_searches(state: AgentState, index: RagIndex) -> None:
         stop_reason = f"retrieval time budget used up ({state.retrieval_time_budget_ms:.0f} ms)"
     else:
         state.pending_queries = follow_ups[:calls_left]
+        state.retrieval_retries.append(
+            {
+                "retry": len(state.retrieval_retries) + 1,
+                "round": retries_used + 2,
+                "searches": [
+                    {
+                        "query": follow_up["query"],
+                        "sub_question_index": follow_up["sub_question_index"],
+                        "reason": follow_up["retry_reason"],
+                    }
+                    for follow_up in state.pending_queries
+                ],
+            }
+        )
         for follow_up in state.pending_queries:
-            state.verification_notes.append(f"Searching again for: {follow_up['query']}")
+            state.verification_notes.append(f"Searching again for: {follow_up['query']} ({follow_up['retry_reason']}).")
         return
     state.metrics["retrieval_stop_reason"] = stop_reason
     state.verification_notes.append(f"Not searching again: {stop_reason}.")

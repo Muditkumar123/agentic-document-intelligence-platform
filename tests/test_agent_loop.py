@@ -178,18 +178,86 @@ def test_verifier_sends_the_run_back_to_retrieval_for_missing_terms(engine):
     assert state.status == "completed"
 
 
-def test_retry_limit_and_search_budget_stop_the_loop():
+RETRY_QUESTION = "Which OAuth server issues access tokens to the client with DNS label octets"
+RETRY_OPTIONS = dict(task="qa", top_k=2, model_profile="extractive_baseline", decomposer="none", coverage_threshold=0.95)
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_retry_limit_search_budget_and_time_budget_stop_the_loop(engine):
     index = build_index(MIXED_CHUNKS)
-    question = "Which OAuth server issues access tokens to the client with DNS label octets"
-    common = dict(task="qa", top_k=2, model_profile="extractive_baseline", decomposer="none", coverage_threshold=0.95)
 
-    no_retries = run_agent(question, index, max_retrieval_retries=0, **common).state
-    no_budget = run_agent(question, index, max_retrieval_calls=1, **common).state
+    no_retries = run_agent(RETRY_QUESTION, index, engine=engine, max_retrieval_retries=0, **RETRY_OPTIONS).state
+    no_budget = run_agent(RETRY_QUESTION, index, engine=engine, max_retrieval_calls=1, **RETRY_OPTIONS).state
+    no_time = run_agent(RETRY_QUESTION, index, engine=engine, retrieval_time_budget_ms=0, **RETRY_OPTIONS).state
 
-    assert no_retries.metrics["retrieval_round_count"] == 1
     assert no_retries.metrics["retrieval_stop_reason"] == "retry limit reached (0)"
-    assert no_budget.metrics["retrieval_round_count"] == 1
     assert "search budget" in no_budget.metrics["retrieval_stop_reason"]
+    assert no_time.metrics["retrieval_stop_reason"] == "retrieval time budget used up (0 ms)"
+    for state in (no_retries, no_budget, no_time):
+        assert state.status == "completed"
+        assert state.metrics["retrieval_round_count"] == 1
+        assert state.metrics["retrieval_retry_count"] == 0 and state.retrieval_retries == []
+        assert [event.node_name for event in state.trace].count("retriever") == 1
+    # The budgets a run was given, and how much of them it used, are in its metrics.
+    assert no_time.metrics["retrieval_time_budget_ms"] == 0
+    assert no_time.metrics["retrieval_elapsed_ms"] >= 0
+    assert no_budget.metrics["max_retrieval_calls"] == 1
+    assert no_retries.metrics["max_retrieval_retries"] == 0
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_retry_cap_stops_a_loop_that_wants_another_round(engine):
+    # Another OAuth passage keeps DNS and TLS out of the first search; the first follow-up
+    # brings back one of them, and the verifier then asks for a third round.
+    index = build_index(MIXED_CHUNKS + [
+        make_chunk("oauth_refresh", "The OAuth authorization server issues refresh tokens and access tokens to the client.", "oauth.md"),
+    ])
+    question = "Which OAuth server issues access tokens to the client, with DNS label octets and TLS early data flight"
+
+    capped = run_agent(question, index, engine=engine, max_retrieval_retries=1, **RETRY_OPTIONS).state
+    uncapped = run_agent(question, index, engine=engine, max_retrieval_retries=2, **RETRY_OPTIONS).state
+
+    assert capped.metrics["retrieval_round_count"] == 2
+    assert capped.metrics["retrieval_retry_count"] == 1
+    assert capped.metrics["retrieval_stop_reason"] == "retry limit reached (1)"
+    assert [event.node_name for event in capped.trace].count("retriever") == 2
+    assert uncapped.metrics["retrieval_round_count"] == 3
+    assert uncapped.metrics["retrieval_retry_count"] == 2
+    assert [retry["round"] for retry in uncapped.retrieval_retries] == [2, 3]
+    assert "retrieval_stop_reason" not in uncapped.metrics
+    assert capped.status == uncapped.status == "completed"
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_each_retry_records_its_reason_in_state_metrics_and_trace(engine):
+    index = build_index(MIXED_CHUNKS)
+
+    state = run_agent(RETRY_QUESTION, index, engine=engine, **RETRY_OPTIONS).state
+
+    assert state.metrics["retrieval_retry_count"] == 1
+    [retry] = state.retrieval_retries
+    assert retry["retry"] == 1 and retry["round"] == 2
+    [search] = retry["searches"]
+    assert search["query"] == state.retrieval_streams[1]["query"]
+    assert search["reason"].startswith("question coverage ") and "below 0.95, missing dns" in search["reason"]
+    # AgentOps trace: the verifier event that started the retry shows it, and the next retriever runs it.
+    verifier_events = [event for event in state.trace if event.node_name == "evidence_verifier"]
+    retriever_events = [event for event in state.trace if event.node_name == "retriever"]
+    assert [event.output_summary["retrieval_retry_count"] for event in verifier_events] == [1, 1]
+    assert verifier_events[0].output_summary["pending_query_count"] == 1
+    assert retriever_events[1].input_summary["pending_query_count"] == 1
+    assert retriever_events[1].output_summary["retrieval_call_count"] == 2
+    assert state.to_dict()["retrieval_retries"] == state.retrieval_retries
+
+    single = run_agent("Who issues OAuth access tokens to the client?", index, engine=engine, **RETRY_OPTIONS).state
+    assert single.metrics["retrieval_retry_count"] == 0 and single.retrieval_retries == []
+
+
+def test_run_agent_rejects_negative_budgets():
+    index = build_index(MIXED_CHUNKS)
+    for budget in ("max_retrieval_retries", "max_retrieval_calls", "retrieval_time_budget_ms"):
+        with pytest.raises(ValueError, match=budget):
+            run_agent("Who issues OAuth access tokens?", index, model_profile="extractive_baseline", **{budget: -1})
 
 
 def test_follow_up_that_finds_nothing_relevant_is_discarded():
@@ -250,17 +318,17 @@ def test_both_engines_take_the_same_path_through_the_loop():
     if not langgraph_available():
         pytest.skip("langgraph not installed")
     index = build_index(MIXED_CHUNKS)
-    kwargs = dict(
-        question="Which OAuth server issues access tokens to the client with DNS label octets",
-        index=index, task="qa", top_k=2, model_profile="extractive_baseline", decomposer="none",
-        coverage_threshold=0.95,
-    )
+    kwargs = dict(question=RETRY_QUESTION, index=index, **RETRY_OPTIONS)
 
     sequential = run_agent(engine="sequential", **kwargs).state
     graphed = run_agent(engine="langgraph", **kwargs).state
 
     assert [e.node_name for e in graphed.trace] == [e.node_name for e in sequential.trace]
+    assert [e.input_summary for e in graphed.trace] == [e.input_summary for e in sequential.trace]
+    assert [e.output_summary for e in graphed.trace] == [e.output_summary for e in sequential.trace]
     assert graphed.retrieval_streams == sequential.retrieval_streams
+    assert graphed.retrieval_retries == sequential.retrieval_retries
+    assert graphed.verification_notes == sequential.verification_notes
     assert graphed.final_answer == sequential.final_answer
 
 
