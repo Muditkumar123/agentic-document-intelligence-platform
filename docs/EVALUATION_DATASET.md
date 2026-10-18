@@ -34,7 +34,7 @@ Expected substrings are used instead of fixed chunk IDs because chunk IDs are ch
 
 The original corpus above (`data/raw/` + `data/reference/golden_qa.jsonl`) is small and project-authored, which made `hit_rate@k = 1.0` look potentially overfit. To make the metrics credible, the **CI quality gate** runs against a separate, fixed corpus of **real, externally authored public documents**:
 
-- Corpus: `data/eval/raw/` — **18 documents across 5 categories** (legal, academic, technical, security, finance).
+- Corpus: `data/eval/raw/` — **19 documents across 5 categories** (legal, academic, technical, security, finance).
 - Golden set: `data/eval/golden_qa.jsonl` — **47 answerable questions** (each tagged with a `category`, including direct, synonym/paraphrase, cross-cutting hard-negative, and table-cell questions) plus **10 unanswerable questions** (`answerable: false`) used to measure abstention. Unanswerable rows are excluded from retrieval metrics and drive the generation refusal metrics.
 - Sources & licensing: every document is a short excerpt from a genuine public source (GDPR / EU AI Act legal text, IETF RFCs, NIST publications, SEC / Investor.gov, arXiv abstracts), documented with URL and license in [`data/eval/SOURCES.md`](../data/eval/SOURCES.md). NIST/SEC are U.S. Government public-domain works; RFCs are reproducible under IETF Trust terms; legal texts are reusable with attribution.
 
@@ -106,9 +106,67 @@ Three findings:
 
 Regression check on the original golden set with the LLM rewriter: hit rate stays **1.000** on both backends (MRR dips slightly — tfidf 1.0 → 0.982, hybrid 0.978 → 0.945 — because fusing variant rankings can nudge the exact-match chunk off rank 1). Rewriting buys paraphrase robustness without losing any answers.
 
-## Latest Benchmark Snapshot
+## Multi-hop Probes and the Retrieval Loop
 
-After expanding the corpus and adding cross-encoder reranking:
+Every golden question is answered by one passage of one document, and the eval documents are short excerpts (19 documents, about one chunk each), so they cannot show whether the agent can **combine evidence**. The multi-hop set adds both missing pieces.
+
+**Corpus.** `data/eval/raw/` plus five **full-length** public documents in `data/eval/long/`: RFC 6749 (OAuth 2.0), RFC 7519 (JWT), RFC 8446 (TLS 1.3), NIST SP 800-207 (Zero Trust Architecture), and NIST AI 100-1 (AI RMF), about 103,000 words. That is 173 chunks instead of 19, so a query competes with whole documents of near-miss passages. Sources and licenses are in [`data/eval/SOURCES.md`](../data/eval/SOURCES.md). The CI gate corpus (`data/eval/raw/`) is unchanged.
+
+**Probes** (`data/eval/multihop_probes.jsonl`, 16 questions). Each needs two facts from two documents, either a *comparison* ("How quickly must a breach be reported under the GDPR, and which NIST CSF function covers acting on an incident?") or a *bridge*, where the first answer leads to the second document ("Which protocol does OAuth 2.0 require ..., and how does version 1.3 of that protocol send data in its first flight?"). Every hop lists the document(s) that can supply it and the exact phrase it must contain, and each phrase was checked to exist in its source.
+
+**Metrics** (`adip/agents/multihop_eval.py`), computed on the evidence the agent hands the writer, capped at `top_k` = 5 so no variant can win by retrieving more:
+
+- **hop recall**: share of hops whose phrase is in a retrieved chunk of the right document.
+- **both hops**: share of questions with every hop supported. This is the headline.
+- **answer both**: the same check on the answer text (token overlap, as in `expected_coverage`).
+- **searches**: retrieval calls per question.
+- The same runs over the 47 single-hop golden questions check what the loop costs ordinary questions.
+
+**Protocol.** The probes were written and the single-pass pipeline measured **before** the loop existed. The coverage threshold was then set by a rule fixed in advance (the 10th percentile of best-passage coverage over the 67 single-hop golden and paraphrase questions), never by looking at the probes. The `single_pass` variant reproduces the pre-loop pipeline exactly: identical evidence and answers on all 16 probes and all 47 golden questions.
+
+**Results** (deterministic: extractive writer, rule-based decomposer; `python -m adip.mlops.run_multihop_eval`):
+
+| Backend | Variant | Hop recall | Both hops | Answer both | Searches | Golden hit | Golden searches |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TF-IDF | single_pass | 0.719 | 0.562 | 0.438 | 1.00 | 1.000 | 1.00 |
+| TF-IDF | decompose | 0.875 | 0.750 | 0.500 | 3.00 | 1.000 | 1.09 |
+| TF-IDF | retry | 0.719 | 0.562 | 0.438 | 1.00 | 1.000 | 1.00 |
+| TF-IDF | **full** (default) | **0.875** | **0.750** | **0.500** | 3.06 | **1.000** | **1.09** |
+| Hybrid | single_pass | 0.875 | 0.750 | 0.438 | 1.00 | 1.000 | 1.00 |
+| Hybrid | **full** (default) | **0.906** | **0.812** | **0.500** | 3.06 | **1.000** | **1.09** |
+
+**With a local LLM** (Qwen/Qwen3-8B served by `adip.serving` on one A100, thinking off; TF-IDF; offline, not in CI):
+
+| Variant | Decomposer | Writer | Hop recall | Both hops | Answer hop coverage | Answer both | Searches | Latency |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| single_pass | none | Qwen3-8B | 0.719 | 0.562 | 0.781 | 0.625 | 1.00 | 8.1 s |
+| full | rules | Qwen3-8B | **0.875** | **0.750** | **0.844** | **0.688** | 3.06 | 8.3 s |
+| llm_full | Qwen3-8B | Qwen3-8B | 0.844 | 0.688 | 0.844 | 0.688 | 2.75 | 22.6 s |
+
+With the extractive writer, the Qwen decomposer split 9 of the 47 single-hop golden questions (rules: 2), averaging 1.45 searches per question against 1.09; hit rate stayed 1.0.
+
+```bash
+# terminal 1
+CUDA_VISIBLE_DEVICES=1 python -m adip.serving server --model-profile qwen3_8b_default --port 8091 --device cuda:0
+# terminal 2
+python -m adip.mlops.run_multihop_eval --variants single_pass full --decomposer llm \
+  --reasoning-provider openai_compatible --reasoning-model-name Qwen/Qwen3-8B \
+  --reasoning-endpoint-url http://127.0.0.1:8091/v1 --reasoning-max-new-tokens 512 \
+  --writer-model-name Qwen/Qwen3-8B --writer-endpoint-url http://127.0.0.1:8091/v1 --skip-golden
+```
+
+What this shows, including what it doesn't:
+
+1. **Decomposition does the work.** Searching once per sub-question takes "both hops retrieved" from 9/16 to 12/16 on TF-IDF and from 12/16 to 13/16 on hybrid. Single-hop questions lose nothing: hit rate stays 1.0, because the whole question is still searched first, and only 2 of 47 are split (both really are two questions), so they average 1.09 searches.
+2. **Coverage-triggered follow-ups barely fire at the pre-set threshold.** With the threshold at 0.3, a follow-up runs on 0 of 47 single-hop questions and 1 of 16 probes, so `retry` alone changes nothing. Whole-question coverage does not separate single-hop from multi-hop questions well, because single-hop paraphrases ("Can I make a website delete everything it knows about me?") also share few words with their answer. An earlier version that searched for rare missing words at a looser threshold fired on most questions, with useless queries such as "let" and "final". The follow-up path stays in, since it is cheap and gated by its own acceptance check, but this eval doesn't support claiming more for it.
+3. **What still fails is the wrong section of the right document.** In three of the four TF-IDF misses, the sub-question's search lands in the right long RFC or NIST document but on a neighbouring chunk (an OAuth chunk about endpoints, not the sentence requiring TLS). In the fourth, the right chunk is fifth in its sub-question's results and falls outside the 5-slot evidence cap. Lexical coverage can't tell a neighbouring chunk from the right one. Per-sub-question cross-encoder reranking or an LLM verifier are the obvious next steps.
+4. **The extractive writer is the answer-level bottleneck.** In 5 of the 12 TF-IDF cases where both hops are retrieved, the answer still misses one. The supporting chunk is in the top 2, but the writer's one-sentence pick from it lands elsewhere (no plural folding, and a bonus for "We present ..." sentences). With the extractive writer, "answer both" moves only from 0.438 to 0.500.
+5. **With an LLM writer the evidence gain reaches the answers.** Qwen3-8B reads all five evidence chunks, and the loop takes "answer covers both hops" from 0.625 to 0.688 and hop coverage from 0.781 to 0.844, for 0.2 s more (the writer dominates latency). Caveat: an 8B writer answers some hops from its own knowledge. Single-pass answer coverage (0.625) is higher than its evidence support (0.562), so with an LLM writer this metric is not purely a grounding measure; faithfulness and citation checks are the guard for that.
+6. **The 8B LLM decomposer is not better than the rules here.** It gets 11/16 both-hops against 12/16. It left the two "statement. question" bridge probes whole, split simple questions that didn't need it ("What obligations does the EU AI Act impose on high-risk AI systems?"), and adds about 14 s per question (including the optional LLM verifier, which a configured reasoning model turns on). Rules stay the default; `decomposer=llm` remains for stronger planner models.
+
+## Earlier Benchmark Snapshot (self-authored corpus)
+
+On the original 10-document self-authored corpus, after adding cross-encoder reranking (superseded by the public-document corpus above, kept for the reranking story):
 
 - Raw documents: 10
 - Processed chunks: 10

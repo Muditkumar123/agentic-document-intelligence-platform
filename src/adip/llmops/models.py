@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 from urllib import error, request
 
+from adip.rag.decompose import split_question
+
 BRIEF_REQUEST_KEYWORDS = {
     "brief",
     "report",
@@ -154,6 +156,8 @@ class GroundedExtractiveAdapter:
             text = self._brief(request)
         elif request.task_type == "plan":
             text = self._plan(request)
+        elif request.task_type == "decompose":
+            text = "\n".join(f"{n}. {part}" for n, part in enumerate(split_question(request.question), start=1))
         elif request.task_type == "verify":
             text = self._verify(request)
         else:
@@ -178,7 +182,7 @@ class GroundedExtractiveAdapter:
         query_terms = meaningful_terms(request.question)
         answer_lines = []
         for index, item in enumerate(request.evidence[:3], start=1):
-            snippet = evidence_focus_sentence(item, query_terms, max_chars=260)
+            snippet = evidence_focus_sentence(item, focus_terms(item, query_terms), max_chars=260)
             answer_lines.append(f"- Evidence {index}: {snippet} ({item['citation']})")
         return (
             f"Question: {request.question}\n\n"
@@ -204,7 +208,7 @@ class GroundedExtractiveAdapter:
         coverage: dict[str, list[str]] = {}
 
         for index, item in enumerate(request.evidence[:5], start=1):
-            focused = evidence_focus_sentence(item, query_terms, max_chars=260)
+            focused = evidence_focus_sentence(item, focus_terms(item, query_terms), max_chars=260)
             if index <= 3:
                 summary_lines.append(f"- {focused} ({item['citation']})")
             evidence_lines.append(f"- Evidence {index}: {focused} ({item['citation']})")
@@ -802,6 +806,12 @@ def meaningful_terms(text: str) -> set[str]:
         for token in re.findall(r"[a-zA-Z0-9_]+", text.lower())
         if len(token) > 3 and token not in STOPWORDS
     }
+
+
+def focus_terms(item: dict[str, Any], question_terms: set[str]) -> set[str]:
+    """Terms to pick a sentence by: the (sub-)question this evidence was retrieved for, if tagged."""
+    focus_query = item.get("focus_query")
+    return meaningful_terms(focus_query) if focus_query else question_terms
 
 
 def evidence_focus_sentence(

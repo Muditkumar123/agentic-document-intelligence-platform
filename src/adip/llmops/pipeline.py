@@ -269,6 +269,8 @@ def build_evidence(retrieved: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "citation": item["citation"],
                 "score": item["score"],
                 "text": chunk["text"],
+                # The agent's retrieval loop tags evidence with the (sub-)question it was found for.
+                "focus_query": item.get("query"),
             }
         )
     return evidence

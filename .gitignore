@@ -14,6 +14,7 @@ data/processed/*.jsonl
 data/processed/*.json
 data/processed/vector_index*/
 data/processed/retrieval_benchmark/
+data/processed/multihop_eval/
 data/monitoring/*.html
 data/monitoring/*.json
 !data/monitoring/ingestion_metrics.json

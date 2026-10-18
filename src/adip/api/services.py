@@ -423,6 +423,8 @@ def run_agent_workflow(
         use_reasoning_planner=request.use_reasoning_planner,
         trace_dir=trace_dir,
         engine=request.engine,
+        decomposer=request.decomposer,
+        max_retrieval_retries=request.max_retrieval_retries,
     )
     payload = result.to_dict()
     payload["latency_ms"] = (time.perf_counter() - started) * 1000

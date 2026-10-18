@@ -31,5 +31,22 @@ Notes:
 - IETF RFC excerpts are reproducible under the IETF Trust legal provisions.
 - NIST and SEC/Investor.gov materials are U.S. Government works in the public domain.
 - arXiv abstracts are short excerpts cited for research/evaluation use with attribution to the authors.
-- Corpus size: 18 documents across 5 categories.
+- Corpus size: 19 documents across 5 categories.
+
+## Long documents (`data/eval/long/`, multi-hop eval only)
+
+Full-length public documents used by the multi-hop evaluation (`data/eval/multihop_probes.jsonl`), alongside the
+short corpus above. They are **not** part of the CI quality-gate corpus in `data/eval/raw/`. Each is the complete
+text; the only edits are removed page headers/footers (RFCs) and running headers/page numbers (NIST PDFs, converted
+with `pdftotext`).
+
+| Document | Category | Source | License / Terms |
+| --- | --- | --- | --- |
+| `rfc6749_oauth2.md` | technical | https://www.rfc-editor.org/rfc/rfc6749.txt | IETF RFC 6749 (Hardt, Ed., 2012); reproducible per IETF Trust legal provisions |
+| `rfc7519_jwt.md` | technical | https://www.rfc-editor.org/rfc/rfc7519.txt | IETF RFC 7519 (Jones, Bradley, Sakimura, 2015); reproducible per IETF Trust legal provisions |
+| `rfc8446_tls13_full.md` | technical | https://www.rfc-editor.org/rfc/rfc8446.txt | IETF RFC 8446 (Rescorla, 2018); reproducible per IETF Trust legal provisions |
+| `nist_sp800_207_zero_trust.md` | security | https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf | NIST SP 800-207 (Rose et al., 2020); U.S. Government work, public domain |
+| `nist_ai_100_1_ai_rmf.md` | security | https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf | NIST AI 100-1, AI RMF 1.0 (2023); U.S. Government work, public domain |
+
+Long-document corpus size: 5 documents, about 103,000 words.
 

@@ -21,10 +21,13 @@ Live demo: [agentic-document-intelligence.onrender.com](https://agentic-document
   FAISS optional) and hybrid (BM25 fused with dense rankings via
   reciprocal-rank fusion), plus optional cross-encoder reranking and
   multi-query rewriting.
-- **Agent pipeline** on LangGraph: intent_router, planner, retriever,
-  evidence_verifier, writer, citation_checker. Every run writes a trace that
-  can be replayed in the dashboard. Falls back to a plain sequential engine
-  when langgraph isn't installed.
+- **Agent loop** on LangGraph: intent_router, planner, retriever,
+  evidence_verifier, writer, citation_checker. The planner splits multi-part
+  questions into sub-questions, and the verifier sends the run back to the
+  retriever when a sub-question's evidence misses something specific (within
+  retry and search budgets). Every run writes a trace that can be replayed in
+  the dashboard. Falls back to a sequential engine with the same routing when
+  langgraph isn't installed.
 - **Abstention**: when the retrieved evidence is too weak, the system says so
   instead of answering. Tested against unanswerable probe questions.
 - **Writers**: a deterministic extractive baseline (runs anywhere, keeps CI
@@ -48,6 +51,11 @@ unanswerable probes, so the numbers aren't overfit to project-authored text.
 - A deterministic quality gate runs in CI: retrieval and answer metrics are
   checked against [`ci/eval_thresholds.json`](ci/eval_thresholds.json) on
   every push.
+- Multi-hop: on 16 questions that need evidence from two documents (over the
+  eval corpus plus five full-length RFCs and NIST publications, 173 chunks),
+  the agent loop raises "both pieces of evidence retrieved" from 0.56 to 0.75
+  with TF-IDF, while single-hop questions keep a 1.0 hit rate at 1.09 searches
+  each. Gated in CI ([docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md#multi-hop-probes-and-the-retrieval-loop)).
 - On a paraphrase probe set (reworded questions with no keyword overlap),
   plain TF-IDF gets 0.85 hit@5; hybrid retrieval plus LLM query rewriting
   reaches 1.00 hit@5 / 0.90 MRR.
@@ -78,7 +86,7 @@ python -m adip.api --host 127.0.0.1 --port 8010
 ```
 
 The dashboard is at `http://127.0.0.1:8010/` and the OpenAPI docs at `/docs`.
-Run the test suite with `pytest` (225 tests, hermetic, no GPU needed).
+Run the test suite with `pytest` (245 tests, hermetic, no GPU needed).
 
 ## API
 

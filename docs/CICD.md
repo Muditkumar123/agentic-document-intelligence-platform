@@ -16,7 +16,8 @@ Runs only after `test` passes, and reproduces the evaluation pipeline end to end
 1. **Ingestion** — `run_ingestion` parses `data/eval/raw/` (19 real public docs across 5 categories) into `data/processed/chunks.jsonl`.
 2. **Retrieval eval** — `run_rag_eval` builds a TF-IDF index (`--no-faiss`, no reranker, hermetic) over the corpus, scored against `data/eval/golden_qa.jsonl` (47 questions), and writes `data/monitoring/rag_eval_metrics.json` with `hit_rate_at_k`, `mrr`, and per-category slices.
 3. **Generation eval** — `run_generation_eval --abstention-threshold 0.10` answers the golden questions with the deterministic extractive writer, refusing when evidence is too weak, and writes `data/monitoring/generation_eval_metrics.json` with the `gen_eval_*` metrics (including refusal precision/recall over the 10 unanswerable questions).
-4. **Gate** — `eval_gate` compares those metrics against [`ci/eval_thresholds.json`](../ci/eval_thresholds.json) and exits non-zero if any check fails.
+4. **Multi-hop eval** — `run_multihop_eval --variants single_pass full` runs the agent over the 16 two-document probes and the 47 single-hop golden questions on an index of `data/eval/raw` plus the full-length documents in `data/eval/long`, with the retrieval loop off and on, and writes `data/monitoring/multihop_eval_metrics.json` (about 10 seconds).
+5. **Gate** — `eval_gate` compares those metrics against [`ci/eval_thresholds.json`](../ci/eval_thresholds.json) and exits non-zero if any check fails.
 
 See [EVALUATION_DATASET.md](EVALUATION_DATASET.md) for the corpus, sources, and licensing. Retrieval is saturated (1.0) on this lexically-distinct corpus, so the discriminating gate is generation faithfulness.
 
@@ -44,6 +45,13 @@ Measured on the real public-document corpus (`data/eval/`):
 | generation | `gen_eval_refusal_precision` | min | 0.80 | 1.00 |
 | generation | `gen_eval_refusal_recall` | min | 0.40 | 0.50 |
 | generation | `gen_eval_refusal_rate` | max | 0.20 | 0.091 |
+| multihop | `multihop_full_full_support_rate` | min | 0.65 | 0.75 |
+| multihop | `multihop_full_hop_recall` | min | 0.80 | 0.875 |
+| multihop | `multihop_full_full_support_gain` | min | 0.10 | 0.1875 |
+| multihop | `golden_full_hit_rate` | min | 0.95 | 1.00 |
+| multihop | `golden_full_avg_retrieval_calls` | max | 1.3 | 1.09 |
+
+The multihop group checks the agent's retrieval loop from both sides: it must beat the single-pass pipeline on two-document questions by at least 0.10 in full-support rate, and it must not cost single-hop questions their answers (hit rate) or many extra searches.
 
 Generation eval runs with `--abstention-threshold 0.10`: the writer refuses when the best retrieved evidence score is below 0.10. `refusal_precision` / `refusal_recall` treat "should refuse" (the 10 unanswerable golden questions) as the positive class — so the gate enforces that abstention catches off-domain questions (recall) without falsely refusing real ones (precision). If abstention were accidentally disabled, recall would drop to 0 and fail the gate.
 

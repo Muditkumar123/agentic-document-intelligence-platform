@@ -90,6 +90,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Workflow engine. `auto` uses LangGraph when installed, else the sequential runner.",
     )
+    parser.add_argument(
+        "--decomposer",
+        choices=["none", "rules", "llm"],
+        default="rules",
+        help="How to split multi-part questions. `llm` uses the reasoning model.",
+    )
+    parser.add_argument(
+        "--max-retrieval-retries",
+        type=int,
+        default=2,
+        help="Follow-up search rounds the verifier may start when evidence does not cover the question (0 disables).",
+    )
     parser.add_argument("--json", action="store_true", help="Print full JSON output.")
     return parser
 
@@ -124,6 +136,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         use_reasoning_planner=args.use_reasoning_planner,
         trace_dir=trace_dir,
         engine=args.engine,
+        decomposer=args.decomposer,
+        max_retrieval_retries=args.max_retrieval_retries,
     )
 
     payload = result.to_dict()

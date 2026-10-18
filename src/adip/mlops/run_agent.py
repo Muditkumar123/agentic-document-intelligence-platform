@@ -45,6 +45,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-dir", type=Path, default=Path("data/monitoring/mlops_runs"))
     parser.add_argument("--enable-mlflow", action="store_true")
     parser.add_argument("--mlflow-tracking-uri", default=None)
+    parser.add_argument(
+        "--decomposer",
+        choices=["none", "rules", "llm"],
+        default="rules",
+        help="How to split multi-part questions. `llm` uses the reasoning model.",
+    )
+    parser.add_argument(
+        "--max-retrieval-retries",
+        type=int,
+        default=2,
+        help="Follow-up search rounds the verifier may start when evidence does not cover the question (0 disables).",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -110,6 +122,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             reasoning_max_new_tokens=args.reasoning_max_new_tokens,
             use_reasoning_planner=args.use_reasoning_planner,
             trace_dir=args.trace_dir,
+            decomposer=args.decomposer,
+            max_retrieval_retries=args.max_retrieval_retries,
         )
         run.log_metrics(
             metrics := {

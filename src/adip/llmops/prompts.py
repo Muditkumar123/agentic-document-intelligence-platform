@@ -18,6 +18,7 @@ PROMPT_REGISTRY = {
     "verify": "verify_v1.txt",
     "judge": "judge_v1.txt",
     "rewrite": "rewrite_v1.txt",
+    "decompose": "decompose_v1.txt",
 }
 
 

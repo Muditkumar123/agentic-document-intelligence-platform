@@ -65,6 +65,7 @@ Deliverable:
 Next upgrade:
 
 - Replace the dependency-light runner with LangGraph. Status: done — the workflow compiles to a real LangGraph `StateGraph` (`[agents]` extra) with conditional failure edges; the sequential runner remains as the fallback engine for minimal installs, and both produce identical AgentOps traces.
+- Make the workflow a loop, not a fixed pipeline. Status: done — the planner splits multi-part questions into sub-questions (rules, or the planner LLM), the retriever searches once per sub-question, and the evidence verifier sends the run back to retrieval when a (sub-)question's evidence misses a specific term, within retry/search/time budgets. On 16 two-document questions over a 173-chunk corpus with full-length RFCs and NIST publications, "both pieces of evidence retrieved" goes from 0.56 to 0.75 (TF-IDF) while the 47 single-hop golden questions keep hit rate 1.0; gated in CI. See EVALUATION_DATASET.md.
 - Add LLM-based synthesis behind the writer node.
 - Add human review gates for high-risk outputs.
 

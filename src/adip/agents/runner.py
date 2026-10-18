@@ -8,8 +8,15 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-from adip.agents.graph import langgraph_available, run_agent_graph
-from adip.agents.models import AgentResult, AgentState, TraceEvent, utc_now_iso
+from adip.agents.graph import AgentRoutes, langgraph_available, run_agent_graph
+from adip.agents.models import (
+    DEFAULT_MAX_RETRIEVAL_CALLS,
+    DEFAULT_MAX_RETRIEVAL_RETRIES,
+    AgentResult,
+    AgentState,
+    TraceEvent,
+    utc_now_iso,
+)
 from adip.agents.nodes import (
     check_citations,
     plan_task,
@@ -18,6 +25,7 @@ from adip.agents.nodes import (
     verify_evidence,
     write_response,
 )
+from adip.rag.coverage import DEFAULT_COVERAGE_THRESHOLD
 from adip.rag.retriever import RagIndex, load_index
 
 AgentNode = Callable[[AgentState, RagIndex], AgentState]
@@ -30,6 +38,17 @@ DEFAULT_NODES: tuple[tuple[str, AgentNode], ...] = (
     ("writer", write_response),
     ("citation_checker", check_citations),
 )
+
+
+
+def route_after_verification(state: AgentState) -> str:
+    """The retrieval loop: search again while the verifier has queued follow-up searches."""
+    return "retriever" if state.pending_queries else "writer"
+
+
+DEFAULT_ROUTES: AgentRoutes = {
+    "evidence_verifier": (route_after_verification, ("retriever", "writer")),
+}
 
 SUPPORTED_ENGINES = {"auto", "langgraph", "sequential"}
 
@@ -72,6 +91,10 @@ def run_agent_from_index_path(
     use_reasoning_planner: bool = False,
     trace_dir: Path | None = None,
     engine: str = "auto",
+    decomposer: str = "rules",
+    max_retrieval_retries: int = DEFAULT_MAX_RETRIEVAL_RETRIES,
+    max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS,
+    coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD,
 ) -> AgentResult:
     index = load_index(index_path)
     return run_agent(
@@ -104,6 +127,10 @@ def run_agent_from_index_path(
         trace_dir=trace_dir,
         index_path=str(index_path),
         engine=engine,
+        decomposer=decomposer,
+        max_retrieval_retries=max_retrieval_retries,
+        max_retrieval_calls=max_retrieval_calls,
+        coverage_threshold=coverage_threshold,
     )
 
 
@@ -138,9 +165,17 @@ def run_agent(
     index_path: str | None = None,
     nodes: tuple[tuple[str, AgentNode], ...] = DEFAULT_NODES,
     engine: str = "auto",
+    decomposer: str = "rules",
+    max_retrieval_retries: int = DEFAULT_MAX_RETRIEVAL_RETRIES,
+    max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS,
+    coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD,
+    routes: AgentRoutes | None = None,
 ) -> AgentResult:
     if top_k <= 0:
         raise ValueError("top_k must be greater than 0")
+    if max_retrieval_retries < 0:
+        raise ValueError("max_retrieval_retries must be 0 or greater")
+    routes = DEFAULT_ROUTES if routes is None else routes
     resolved_engine = resolve_engine(engine)
 
     state = AgentState(
@@ -170,6 +205,10 @@ def run_agent(
         reasoning_prompt_version=reasoning_prompt_version,
         reasoning_max_new_tokens=reasoning_max_new_tokens,
         use_reasoning_planner=use_reasoning_planner,
+        decomposer=decomposer,
+        max_retrieval_retries=max_retrieval_retries,
+        max_retrieval_calls=max_retrieval_calls,
+        coverage_threshold=coverage_threshold,
         metrics={
             "index_backend": index.backend,
             "index_chunk_count": len(index.chunks),
@@ -186,21 +225,61 @@ def run_agent(
             "reasoning_device": reasoning_device or device,
             "use_reasoning_planner": use_reasoning_planner,
             "workflow_engine": resolved_engine,
+            "max_retrieval_retries": max_retrieval_retries,
         },
     )
 
     workflow_started = time.perf_counter()
     if resolved_engine == "langgraph":
-        state = run_agent_graph(state, index, nodes, _run_node)
+        state = run_agent_graph(state, index, nodes, _run_node, routes)
     else:
-        for node_name, node in nodes:
-            state = _run_node(node_name, node, state, index)
-            if state.status == "failed":
-                break
+        state = run_sequential(state, index, nodes, routes)
 
     state.metrics["workflow_duration_ms"] = (time.perf_counter() - workflow_started) * 1000
     trace_path = write_trace(state, trace_dir) if trace_dir else None
     return AgentResult(state=state, trace_path=trace_path)
+
+
+def next_node_name(
+    node_names: list[str],
+    routes: AgentRoutes,
+    current: str,
+    state: AgentState,
+) -> str | None:
+    """Same routing as the LangGraph engine: a router's choice if valid, else the next node in order."""
+    position = node_names.index(current)
+    fallback = node_names[position + 1] if position + 1 < len(node_names) else None
+    router, targets = routes.get(current, (None, ()))
+    if router is not None:
+        choice = router(state)
+        if choice in targets and choice in node_names:
+            return choice
+    return fallback
+
+
+def run_sequential(
+    state: AgentState,
+    index: RagIndex,
+    nodes: tuple[tuple[str, AgentNode], ...],
+    routes: AgentRoutes,
+) -> AgentState:
+    """Dependency-free engine: follows the same routes, including the retrieval loop."""
+    node_names = [name for name, _ in nodes]
+    node_by_name = dict(nodes)
+    max_steps = len(node_names) + 2 * (state.max_retrieval_retries + 1) + 4
+    current: str | None = node_names[0] if node_names else None
+    steps = 0
+    while current is not None:
+        state = _run_node(current, node_by_name[current], state, index)
+        steps += 1
+        if state.status == "failed":
+            break
+        if steps >= max_steps:
+            state.status = "failed"
+            state.verification_notes.append(f"Workflow stopped after {steps} steps without finishing.")
+            break
+        current = next_node_name(node_names, routes, current, state)
+    return state
 
 
 def _run_node(node_name: str, node: AgentNode, state: AgentState, index: RagIndex) -> AgentState:
@@ -242,6 +321,9 @@ def summarize_state(state: AgentState) -> dict[str, object]:
         "plan_step_count": len(state.plan),
         "planning_note_count": len(state.planning_notes),
         "retrieved_count": len(state.retrieved),
+        "sub_question_count": len(state.sub_questions),
+        "retrieval_round_count": state.metrics.get("retrieval_round_count", 0),
+        "pending_query_count": len(state.pending_queries),
         "citation_count": len(state.citations),
         "verification_note_count": len(state.verification_notes),
         "answer_char_count": len(state.final_answer),

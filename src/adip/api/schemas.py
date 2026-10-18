@@ -61,6 +61,10 @@ class AgentRunRequest(BaseModel):
     reasoning_max_new_tokens: int = Field(default=256, ge=1)
     use_reasoning_planner: bool = False
     engine: Literal["auto", "langgraph", "sequential"] = "auto"
+    # Retrieval loop: split multi-part questions, and let the verifier search again
+    # (up to this many extra rounds) when the evidence does not cover the question.
+    decomposer: Literal["none", "rules", "llm"] = "rules"
+    max_retrieval_retries: int = Field(default=2, ge=0, le=4)
 
 
 class RebuildIndexRequest(BaseModel):

@@ -6,6 +6,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from adip.rag.coverage import DEFAULT_COVERAGE_THRESHOLD
+
+DEFAULT_MAX_RETRIEVAL_RETRIES = 2
+DEFAULT_MAX_RETRIEVAL_CALLS = 8
+DEFAULT_RETRIEVAL_TIME_BUDGET_MS = 10_000.0
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -55,6 +61,18 @@ class AgentState:
     reasoning_prompt_version: str | None = None
     reasoning_max_new_tokens: int = 256
     use_reasoning_planner: bool = False
+    # Retrieval loop: how the question is split, and how much re-searching is allowed.
+    decomposer: str = "rules"
+    max_retrieval_retries: int = DEFAULT_MAX_RETRIEVAL_RETRIES
+    max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS
+    retrieval_time_budget_ms: float = DEFAULT_RETRIEVAL_TIME_BUDGET_MS
+    coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD
+    sub_questions: list[str] = field(default_factory=list)
+    pending_queries: list[dict[str, Any]] = field(default_factory=list)
+    retrieval_streams: list[dict[str, Any]] = field(default_factory=list)
+    evidence_pool: dict[str, dict[str, Any]] = field(default_factory=dict)
+    sub_question_support: list[dict[str, Any]] = field(default_factory=list)
+    retrieval_elapsed_ms: float = 0.0
     plan: list[str] = field(default_factory=list)
     planning_notes: list[str] = field(default_factory=list)
     retrieved: list[dict[str, Any]] = field(default_factory=list)
@@ -75,6 +93,8 @@ class AgentState:
         if payload.get("reasoning_api_key"):
             payload["reasoning_api_key"] = "***"
         payload["trace"] = [event.to_dict() for event in self.trace]
+        # Every accepted search result; the evidence the writer used is already in `retrieved`.
+        payload.pop("evidence_pool", None)
         return payload
 
 

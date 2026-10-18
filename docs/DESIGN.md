@@ -126,7 +126,7 @@ The base pipeline is generic. Domain presets customize extraction fields, prompt
 
 ## 8. Agentic Workflow
 
-The first agent graph should stay simple and inspectable.
+The agent graph stays small and inspectable, but it is a loop, not a fixed pipeline: the verifier decides whether the evidence is good enough or whether to search again.
 
 ```text
 User Request
@@ -135,14 +135,18 @@ User Request
 Intent Router
     |
     v
-Planner
-    |
+Planner -------- splits a multi-part question into sub-questions
+    |            (rule-based, or the planner LLM with --decomposer llm)
     v
-Retriever
+Retriever <------------------------------------+
+    |   round 1: the whole question + one       |
+    |   search per sub-question                 |
+    v                                           |
+Evidence Verifier -- a (sub-)question's best    |
+    |                passage misses a specific  |
+    |                term? --> follow-up search +   (at most 2 extra rounds / 8 searches)
     |
-    v
-Evidence Verifier
-    |
+    |  covered, or the budget is used up
     v
 Answer or Report Writer
     |
@@ -153,7 +157,17 @@ Citation Checker
 Final Response
 ```
 
-The workflow runs on two interchangeable engines behind one definition: a real **LangGraph `StateGraph`** (default when the `[agents]` extra is installed) where the break-on-failure behavior is expressed as conditional edges routing to `END`, and a dependency-light sequential runner as fallback for minimal installs. Both engines share the same node functions, the same `AgentState`, and the same tracing wrapper, so AgentOps traces are identical and every trace records which engine produced it (`workflow_engine`).
+**Decomposition.** The planner splits coordinated questions ("..., and which ...", "? Also, ...") into sub-questions. Rules are syntax-only and never split noun phrases ("X and Y"), so ordinary questions stay whole (2 of 47 golden questions split, and both really are two questions). With `--decomposer llm` the planner model writes the sub-questions from the versioned `decompose_v1` prompt, falling back to the rules if it fails. When a question is split, the whole question is still searched first, so decomposition can only add evidence.
+
+**Evidence streams.** Every search is a stream. The evidence list interleaves the accepted streams round-robin (each stream's best result first), dedupes, and caps at `top_k`, so the writer's context stays the same size however many searches ran. Each evidence item records the query that found it, and the extractive writer picks that item's sentence by that query. A question that is never split or retried gets exactly the evidence a plain search returns.
+
+**Coverage-driven follow-ups.** For each (sub-)question the verifier finds the retrieved passage covering the most of its content terms, weighted by IDF (`adip/rag/coverage.py`). Below the coverage threshold, and only if a *specific* term is missing (rare in the corpus, or a name/acronym in the question), the missing terms become a follow-up search. A follow-up is kept only if its best passage actually contains those terms, so a fruitless search adds nothing. The threshold (0.3) was fixed by a rule set before measuring: the 10th percentile of best-passage coverage over 67 single-hop questions.
+
+**Budgets.** `max_retrieval_retries` (default 2), `max_retrieval_calls` (8), and a retrieval time budget stop the loop; the stop reason is recorded in the trace. The optional LLM verifier runs once, on the final evidence.
+
+**Engines.** The workflow runs on two interchangeable engines behind one definition: a real **LangGraph `StateGraph`** (default when the `[agents]` extra is installed) and a dependency-light sequential runner. Both read the same node list and the same router table: failure routes to `END`, and the verifier's router chooses `retriever` or `writer`. They share the same node functions, the same `AgentState`, and the same tracing wrapper, so AgentOps traces are identical (a retried run shows `retriever` and `evidence_verifier` twice), and every trace records which engine produced it (`workflow_engine`).
+
+Measured on two-document questions in [EVALUATION_DATASET.md](EVALUATION_DATASET.md#multi-hop-probes-and-the-retrieval-loop).
 
 ### Agent State
 
@@ -162,6 +176,9 @@ request_id
 user_query
 domain_preset
 document_ids
+sub_questions
+retrieval_streams      every search: query, reason, round, accepted, chunk ids
+sub_question_support   coverage, missing terms, follow-up terms per (sub-)question
 retrieved_chunks
 evidence_summary
 draft_answer
@@ -181,10 +198,10 @@ metrics
 
 Current baseline tool support:
 
-- Search document chunks through the local RAG index.
-- Verify whether evidence was retrieved.
+- Search document chunks through the local RAG index, once per question and sub-question.
+- Check whether the evidence covers each (sub-)question, and search again for what is missing.
 - Write extractive cited answers and research briefs.
-- Persist node-by-node AgentOps traces.
+- Persist node-by-node AgentOps traces, including every search stream.
 
 ## 9. NLP and LLM Concepts To Demonstrate
 
@@ -450,7 +467,7 @@ Current implementation starts with a local TF-IDF vector baseline using `scikit-
 - Citation checker.
 - AgentOps trace persistence.
 
-Current implementation completes these as an extractive baseline running on LangGraph orchestration (with a sequential fallback). LLM synthesis as the default writer is the planned upgrade.
+Current implementation completes these as an extractive baseline running on LangGraph orchestration (with a sequential fallback), with a verifier-driven retrieval loop and question decomposition. LLM synthesis as the default writer is the planned upgrade.
 
 ### Milestone 4: MLOps Foundation
 

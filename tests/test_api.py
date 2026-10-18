@@ -1052,3 +1052,32 @@ def test_api_settings_from_env():
         assert "ADIP_MAX_UPLOAD_MB" in str(exc)
     else:
         raise AssertionError("an invalid upload limit must be rejected")
+
+
+def test_agent_service_forwards_retrieval_loop_options(monkeypatch):
+    captured = {}
+
+    def fake_run_agent_from_index_path(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(to_dict=lambda: {"state": {"status": "completed", "final_answer": "ok"}, "trace_path": None})
+
+    monkeypatch.setattr(api_services, "run_agent_from_index_path", fake_run_agent_from_index_path)
+
+    api_services.run_agent_workflow(
+        AgentRunRequest(question="Compare A and B.", decomposer="none", max_retrieval_retries=0),
+        index_path=Path("idx"),
+    )
+    defaults = AgentRunRequest(question="q")
+
+    assert captured["decomposer"] == "none"
+    assert captured["max_retrieval_retries"] == 0
+    assert defaults.decomposer == "rules"
+    assert defaults.max_retrieval_retries == 2
+
+
+def test_agent_run_rejects_out_of_range_retry_budget(tmp_path):
+    client = make_client(make_settings(tmp_path))
+
+    response = client.post("/agent/run", json={"question": "q", "max_retrieval_retries": 10})
+
+    assert response.status_code == 422

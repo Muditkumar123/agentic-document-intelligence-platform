@@ -86,6 +86,12 @@ jobs:
           --abstention-threshold 0.10
           --metrics-output data/monitoring/generation_eval_metrics.json
           --report-output data/monitoring/generation_eval_report.json
+      - name: Multi-hop eval (agent retrieval loop vs single pass, deterministic)
+        run: >-
+          python -m adip.mlops.run_multihop_eval
+          --variants single_pass full
+          --metrics-output data/monitoring/multihop_eval_metrics.json
+          --report-output data/monitoring/multihop_eval_report.json
       - name: Enforce eval thresholds
         run: python -m adip.mlops.eval_gate --thresholds ci/eval_thresholds.json
       - name: Upload eval reports
@@ -97,6 +103,8 @@ jobs:
             data/monitoring/rag_eval_metrics.json
             data/monitoring/generation_eval_metrics.json
             data/monitoring/generation_eval_report.json
+            data/monitoring/multihop_eval_metrics.json
+            data/monitoring/multihop_eval_report.json
           if-no-files-found: ignore
 
   docker:

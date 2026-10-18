@@ -1,0 +1,14 @@
+You split questions for a document retrieval system.
+
+If the user question asks about more than one thing (for example two facts from different documents, or a comparison), rewrite it as 2 to 4 self-contained sub-questions. Each sub-question must name its own subject explicitly, never "it", "that one" or "the second one". If a later part depends on the answer to an earlier part, keep the dependency in words (for example "Which river flows through Vienna?" then "How long is the river that flows through Vienna?") rather than guessing the answer. Do not answer anything. Do not add new topics.
+
+If the question asks about only one thing, return it unchanged as a single line.
+
+Return ONLY the sub-questions, one per line, numbered like:
+1. <sub-question>
+2. <sub-question>
+
+Domain preset: {{ domain_preset }}
+
+User question:
+{{ question }}

@@ -694,6 +694,9 @@ function renderAgentResult(payload) {
   renderTrace(statePayload.trace || [], {
     engine: metrics.workflow_engine,
     totalMs: metrics.workflow_duration_ms,
+    subQuestions: statePayload.sub_questions || [],
+    streams: statePayload.retrieval_streams || [],
+    stopReason: metrics.retrieval_stop_reason,
   });
   renderRaw(payload);
 }
@@ -895,6 +898,9 @@ async function loadAgentTraceDetail(runId) {
     renderTrace(trace.trace || [], {
       engine: trace.metrics ? trace.metrics.workflow_engine : null,
       totalMs: trace.metrics ? trace.metrics.workflow_duration_ms : null,
+      subQuestions: trace.sub_questions || [],
+      streams: trace.retrieval_streams || [],
+      stopReason: trace.metrics ? trace.metrics.retrieval_stop_reason : null,
     });
     renderRaw(payload);
   } catch (error) {
@@ -1021,6 +1027,7 @@ function renderTrace(events, meta) {
     `;
     list.appendChild(badgeRow);
   }
+  renderRetrievalLoop(list, meta);
 
   const maxDuration = Math.max(
     1,
@@ -1042,7 +1049,7 @@ function renderTrace(events, meta) {
       <div class="trace-step-details hidden">
         ${event.error ? `<p class="trace-step-error">${escapeHtml(event.error)}</p>` : ""}
         <p class="item-meta">Retrieved ${safeCount(event.output_summary, "retrieved_count")} | Citations ${safeCount(event.output_summary, "citation_count")} | Plan steps ${safeCount(event.output_summary, "plan_step_count")} | Answer chars ${safeCount(event.output_summary, "answer_char_count")}</p>
-        <p class="item-meta">Status after node: ${escapeHtml(stateField(event.output_summary, "status"))} | Task: ${escapeHtml(stateField(event.output_summary, "task_type"))}</p>
+        <p class="item-meta">Status after node: ${escapeHtml(stateField(event.output_summary, "status"))} | Task: ${escapeHtml(stateField(event.output_summary, "task_type"))} | Retrieval round: ${escapeHtml(stateField(event.output_summary, "retrieval_round_count"))}</p>
       </div>
     `;
     node.addEventListener("click", () => {
@@ -1050,6 +1057,40 @@ function renderTrace(events, meta) {
     });
     list.appendChild(node);
   });
+}
+
+const LOOP_REASONS = {
+  question: "whole question",
+  sub_question: "sub-question",
+  follow_up: "follow-up for missing terms",
+};
+
+// Shows what the agent's retrieval loop did: how it split the question, and every
+// search it ran (including follow-ups the verifier asked for, and ones it discarded).
+function renderRetrievalLoop(list, meta) {
+  const streams = (meta && meta.streams) || [];
+  const subQuestions = (meta && meta.subQuestions) || [];
+  if (streams.length <= 1 && subQuestions.length <= 1) {
+    return;
+  }
+  const box = document.createElement("div");
+  box.className = "trace-loop";
+  const subs =
+    subQuestions.length > 1
+      ? `<p class="item-meta">Split into ${subQuestions.length} sub-questions:</p>
+         <ol class="trace-loop-list">${subQuestions.map((q) => `<li>${escapeHtml(q)}</li>`).join("")}</ol>`
+      : "";
+  const rows = streams
+    .map(
+      (stream) => `<li><span class="trace-loop-round">round ${escapeHtml(String(stream.round))}</span>
+        ${escapeHtml(LOOP_REASONS[stream.reason] || stream.reason)}: "${escapeHtml(stream.query)}"
+        ${stream.accepted ? "" : '<span class="trace-loop-discarded">discarded</span>'}</li>`
+    )
+    .join("");
+  const stop = meta.stopReason ? `<p class="item-meta">Stopped searching: ${escapeHtml(meta.stopReason)}</p>` : "";
+  box.innerHTML = `<h3>Retrieval loop</h3>${subs}<p class="item-meta">${streams.length} searches:</p>
+    <ul class="trace-loop-list">${rows}</ul>${stop}`;
+  list.appendChild(box);
 }
 
 function stateField(summary, key) {
