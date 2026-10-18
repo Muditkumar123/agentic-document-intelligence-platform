@@ -6,7 +6,15 @@ from adip.config.model_profiles import load_model_profile
 from adip.llmops.evaluation import evaluate_generation
 from adip.llmops.generation_eval import aggregate_eval, score_answer, with_judge
 from adip.llmops.judge import JudgeVerdict, LLMJudge, parse_judge_verdict
-from adip.llmops.models import clean_evidence_text
+from adip.llmops.models import (
+    GenerationRequest,
+    GroundedExtractiveAdapter,
+    clean_evidence_text,
+    evidence_focus_sentence,
+    evidence_term_weights,
+    question_part_terms,
+    split_evidence_sentences,
+)
 from adip.llmops.pipeline import (
     evaluate_abstention,
     generate_grounded_response,
@@ -375,6 +383,101 @@ def test_clean_evidence_text_removes_pdf_title_page_noise():
     assert cleaned.startswith("Abstract: SIMON and SPECK")
     assert "e-mail" not in cleaned
     assert "Copyright" not in cleaned
+
+
+RESNET_ABSTRACT = (
+    "We present a residual learning framework to ease the training of networks that are substantially "
+    "deeper than those used previously. On the ImageNet dataset we evaluate residual nets with a depth "
+    "of up to 152 layers, 8 times deeper than VGG nets but still having lower complexity."
+)
+
+
+def focus_sentence(text, question, **kwargs):
+    return evidence_focus_sentence({"text": text}, question_part_terms(question), max_chars=260, **kwargs)
+
+
+def extractive_answer(question, text, task_type="qa"):
+    evidence = [{"text": text, "citation": "resnet.md p.1 chunk c1", "filename": "resnet.md"}]
+    request = GenerationRequest(
+        prompt="",
+        question=question,
+        task_type=task_type,
+        domain_preset="academic",
+        evidence=evidence,
+    )
+    return GroundedExtractiveAdapter().generate(request).text
+
+
+def test_focus_sentence_folds_inflections_and_plurals():
+    text = (
+        "- Session resumption with and without server-side state as well as the PSK-based cipher suites of "
+        "earlier TLS versions have been replaced by a single new PSK exchange. - Static RSA and "
+        "Diffie-Hellman cipher suites have been removed; all public-key based key exchange mechanisms now "
+        "provide forward secrecy."
+    )
+
+    sentence = focus_sentence(text, "Which key-exchange cipher suite did TLS 1.3 remove?")
+
+    assert "Static RSA and Diffie-Hellman cipher suites have been removed" in sentence
+
+
+def test_contribution_sentence_wins_only_for_summary_requests():
+    assert "152 layers" in focus_sentence(RESNET_ABSTRACT, "How deep were the residual nets evaluated on ImageNet?")
+    assert focus_sentence(RESNET_ABSTRACT, "deep residual nets", prefer_contributions=True).startswith("We present")
+
+    fact_answer = extractive_answer("How deep were the residual nets evaluated on ImageNet?", RESNET_ABSTRACT)
+    summary_answer = extractive_answer("Tell me about this paper.", RESNET_ABSTRACT)
+    brief_answer = extractive_answer("Residual networks on ImageNet", RESNET_ABSTRACT, task_type="brief")
+
+    assert "Evidence 1: On the ImageNet dataset" in fact_answer
+    assert "Evidence 1: We present a residual learning framework" in summary_answer
+    assert "Evidence 1: We present a residual learning framework" in brief_answer
+
+
+def test_rare_evidence_terms_outweigh_common_ones():
+    text = (
+        "Personal data are processed lawfully, fairly and in a transparent manner in relation to the data "
+        "subject, and personal data are collected only for specified purposes. "
+        "Records are kept for no longer than necessary. "
+        "Personal data must be accurate and, where necessary, up to date. "
+        "Personal data are protected against unauthorised or unlawful processing."
+    )
+    question = "Which personal data rule says how long records are kept?"
+    weights = evidence_term_weights([{"text": text}])
+
+    assert weights["kept"] > weights["data"]
+    assert focus_sentence(text, question).startswith("Personal data are processed lawfully")
+    assert focus_sentence(text, question, term_weights=weights) == "Records are kept for no longer than necessary."
+
+
+def test_focus_sentence_prefers_answering_one_question_part_over_grazing_both():
+    text = (
+        "Zero trust deployments often place OAuth tokens behind a gateway. "
+        "The authorization server issues tokens to each client after authenticating the resource owner."
+    )
+    question = "Which zero trust component makes the final decision, and which OAuth role issues tokens to clients?"
+
+    assert len(question_part_terms(question)) == 2
+    assert focus_sentence(text, question).startswith("The authorization server issues tokens")
+
+
+def test_legal_list_items_are_chosen_individually():
+    text = (
+        "Article 5(1) of the EU General Data Protection Regulation sets out the principles relating to "
+        "processing of personal data. Personal data shall be: (a) processed lawfully, fairly and in a "
+        "transparent manner in relation to the data subject ('lawfulness, fairness and transparency'); "
+        "(b) collected for specified, explicit and legitimate purposes and not further processed in a manner "
+        "that is incompatible with those purposes ('purpose limitation'); (e) kept in a form which permits "
+        "identification of data subjects for no longer than is necessary for the purposes for which the "
+        "personal data are processed ('storage limitation')."
+    )
+
+    sentences = split_evidence_sentences(text)
+    sentence = focus_sentence(text, "How long may personal data be kept?")
+
+    assert [s[:3] for s in sentences[1:]] == ["(a)", "(b)", "(e)"]
+    assert sentence.startswith("(e) kept in a form")
+    assert "('storage limitation')" in sentence
 
 
 def test_generate_grounded_verification_returns_metrics():

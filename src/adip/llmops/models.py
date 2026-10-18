@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import re
 import time
+from collections import Counter
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 from urllib import error, request
 
+from adip.rag.coverage import content_terms
 from adip.rag.decompose import split_question
+from adip.rag.retriever import looks_like_generic_document_request
 
 BRIEF_REQUEST_KEYWORDS = {
     "brief",
@@ -51,6 +55,11 @@ NOISY_SENTENCE_PREFIXES = (
     "received ",
     "copyright",
 )
+
+# Sentence ends, plus the start of each enumerated item in a legal-style list
+# ("... shall be: (a) processed lawfully ...; (b) collected ..."), so each item
+# can be chosen on its own instead of the whole list being cut at the display limit.
+LIST_ITEM_OR_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|(?<=[;:])\s+(?=\([a-z0-9]{1,4}\)\s)")
 
 CONTRIBUTION_PHRASES = (
     "in this paper",
@@ -179,10 +188,20 @@ class GroundedExtractiveAdapter:
                 "The indexed documents do not contain enough evidence to answer this question."
             )
 
-        query_terms = meaningful_terms(request.question)
+        query_parts = question_part_terms(request.question)
+        term_weights = evidence_term_weights(request.evidence)
+        # "Tell me about this paper" wants the paper's own contribution statement;
+        # any other question wants the sentence that states the asked-for fact.
+        prefer_contributions = looks_like_generic_document_request(request.question)
         answer_lines = []
         for index, item in enumerate(request.evidence[:3], start=1):
-            snippet = evidence_focus_sentence(item, focus_terms(item, query_terms), max_chars=260)
+            snippet = evidence_focus_sentence(
+                item,
+                focus_terms(item, query_parts),
+                max_chars=260,
+                term_weights=term_weights,
+                prefer_contributions=prefer_contributions,
+            )
             answer_lines.append(f"- Evidence {index}: {snippet} ({item['citation']})")
         return (
             f"Question: {request.question}\n\n"
@@ -202,13 +221,21 @@ class GroundedExtractiveAdapter:
                 "The indexed documents do not contain enough evidence for a grounded brief."
             )
 
-        query_terms = meaningful_terms(request.question)
+        query_parts = question_part_terms(request.question)
+        term_weights = evidence_term_weights(request.evidence)
         summary_lines = []
         evidence_lines = []
         coverage: dict[str, list[str]] = {}
 
         for index, item in enumerate(request.evidence[:5], start=1):
-            focused = evidence_focus_sentence(item, focus_terms(item, query_terms), max_chars=260)
+            # A brief is a summary, so it favours "We present ..." contribution sentences.
+            focused = evidence_focus_sentence(
+                item,
+                focus_terms(item, query_parts),
+                max_chars=260,
+                term_weights=term_weights,
+                prefer_contributions=True,
+            )
             if index <= 3:
                 summary_lines.append(f"- {focused} ({item['citation']})")
             evidence_lines.append(f"- Evidence {index}: {focused} ({item['citation']})")
@@ -808,37 +835,92 @@ def meaningful_terms(text: str) -> set[str]:
     }
 
 
-def focus_terms(item: dict[str, Any], question_terms: set[str]) -> set[str]:
-    """Terms to pick a sentence by: the (sub-)question this evidence was retrieved for, if tagged."""
+def selection_terms(text: str) -> set[str]:
+    """Terms for choosing an evidence sentence: ``content_terms`` (stopwords, plural
+    folding) plus ``-ed``/``-ing`` folding, so "removed" matches "remove"."""
+    return {fold_inflection(term) for term in content_terms(text)}
+
+
+def fold_inflection(term: str) -> str:
+    """Conservative suffix folding: "removed"/"remove" -> "remov", "processing" -> "process"."""
+    for suffix in ("ing", "ed"):
+        if term.endswith(suffix) and len(term) - len(suffix) >= 4:
+            term = term[: -len(suffix)]
+            break
+    if len(term) > 4 and term.endswith("e"):
+        term = term[:-1]
+    return term
+
+
+def question_part_terms(question: str) -> list[set[str]]:
+    """Selection terms of each part of a multi-part question (one set for a simple question)."""
+    parts = [selection_terms(part) for part in split_question(question)]
+    return [terms for terms in parts if terms] or [selection_terms(question)]
+
+
+def focus_terms(item: dict[str, Any], question_parts: list[set[str]]) -> list[set[str]]:
+    """Term sets to pick a sentence by: the parts of the (sub-)question this evidence
+    was retrieved for, if tagged, else of the whole question."""
     focus_query = item.get("focus_query")
-    return meaningful_terms(focus_query) if focus_query else question_terms
+    return question_part_terms(focus_query) if focus_query else question_parts
+
+
+def evidence_term_weights(evidence: list[dict[str, Any]]) -> dict[str, float]:
+    """IDF of each term over the sentences of all the retrieved evidence.
+
+    The writer's job is choosing between these sentences, so a term found in many
+    of them ("data", "TLS") says little about which one answers, and a term found
+    in few ("removed", "kept") picks the sentence out.
+    """
+    frequency: Counter[str] = Counter()
+    sentence_count = 0
+    for item in evidence:
+        for sentence in split_evidence_sentences(str(item["text"])):
+            frequency.update(selection_terms(sentence))
+            sentence_count += 1
+    return {
+        term: math.log((sentence_count + 1) / (count + 1)) + 1.0
+        for term, count in frequency.items()
+    }
 
 
 def evidence_focus_sentence(
     item: dict[str, Any],
-    query_terms: set[str],
+    query_parts: list[set[str]],
     max_chars: int,
+    term_weights: dict[str, float] | None = None,
+    prefer_contributions: bool = False,
 ) -> str:
+    """The sentence of ``item`` that best answers one of ``query_parts``.
+
+    Sentences are ranked by, in order: not boilerplate (keywords, funding, URLs);
+    for summary requests (``prefer_contributions``), stating the paper's
+    contribution ("We present ..."); the IDF-weighted sum of the terms matched
+    from the best single question part (each term weighs 1 without
+    ``term_weights``), so a sentence that answers one part beats one that grazes
+    both; and a displayed length close to 180 characters. Remaining ties go to
+    the earliest sentence.
+    """
     sentences = split_evidence_sentences(str(item["text"]))
     if not sentences:
         return compact_text(str(item["text"]), max_chars=max_chars)
+    weights = term_weights or {}
 
-    def score(sentence: str) -> tuple[int, int]:
+    def rank(sentence: str) -> tuple[bool, bool, float, int]:
         lowered = sentence.lower()
-        terms = meaningful_terms(sentence)
-        overlap = len(terms & query_terms)
-        contribution_bonus = 3 if any(phrase in lowered for phrase in CONTRIBUTION_PHRASES) else 0
-        noise_penalty = 8 if lowered.startswith(NOISY_SENTENCE_PREFIXES) else 0
+        terms = selection_terms(sentence)
+        relevance = max(sum(weights.get(term, 1.0) for term in terms & part) for part in query_parts)
+        contribution = prefer_contributions and any(phrase in lowered for phrase in CONTRIBUTION_PHRASES)
         length_fit = -abs(min(len(sentence), max_chars) - 180)
-        return (overlap + contribution_bonus - noise_penalty, length_fit)
+        return (not lowered.startswith(NOISY_SENTENCE_PREFIXES), contribution, relevance, length_fit)
 
-    best = max(sentences, key=score)
+    best = max(sentences, key=rank)
     return compact_text(best, max_chars=max_chars)
 
 
 def split_evidence_sentences(text: str) -> list[str]:
     normalized = clean_evidence_text(text)
-    parts = re.split(r"(?<=[.!?])\s+", normalized)
+    parts = LIST_ITEM_OR_SENTENCE_BREAK.split(normalized)
     sentences = [part.strip() for part in parts if len(part.strip()) >= 35]
     if sentences:
         return sentences

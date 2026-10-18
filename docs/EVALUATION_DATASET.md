@@ -40,18 +40,18 @@ The original corpus above (`data/raw/` + `data/reference/golden_qa.jsonl`) is sm
 
 This separation follows the principle that `data/raw/` is the **demo / user-upload** corpus, while `data/eval/` is the **fixed evaluation** corpus the gate is measured against.
 
-**Measured baseline (TF-IDF, no faiss, no rerank, deterministic extractive writer):**
+**Measured baseline (TF-IDF, no faiss, no rerank, deterministic extractive writer, abstention threshold 0.10 as in CI):**
 
 | Metric | Value |
 | --- | --- |
 | Retrieval hit_rate@k / MRR | 1.00 / 1.00 |
-| Generation faithfulness | 0.595 |
-| Generation grounded rate | 0.956 |
-| Generation expected coverage | 0.795 |
-| Generation citation coverage | 0.767 |
-| Generation refusal rate | 0.000 |
+| Generation faithfulness | 0.596 |
+| Generation grounded rate | 0.942 |
+| Generation expected coverage | 0.826 |
+| Generation citation coverage | 0.684 |
+| Generation refusal rate | 0.088 |
 
-**Honest reading of retrieval = 1.0:** the five domains are lexically distinct (GDPR vs RFC vs SEC vocabularies barely overlap), so TF-IDF separates them trivially and hit_rate stays 1.0 even per-category. That is an honest property of a clean corpus, not overfitting — so retrieval is treated as a smoke test, and the **discriminating gate lives in generation faithfulness (0.595)**, which varies and does not saturate. The retrieval *ranking* discrimination story is carried by the separate cross-encoder reranking benchmark on the hard-negative dataset (MRR 0.733 → 0.900).
+**Honest reading of retrieval = 1.0:** the five domains are lexically distinct (GDPR vs RFC vs SEC vocabularies barely overlap), so TF-IDF separates them trivially and hit_rate stays 1.0 even per-category. That is an honest property of a clean corpus, not overfitting — so retrieval is treated as a smoke test, and the **discriminating gate lives in generation faithfulness (0.596)**, which varies and does not saturate. The retrieval *ranking* discrimination story is carried by the separate cross-encoder reranking benchmark on the hard-negative dataset (MRR 0.733 → 0.900).
 
 The retrieval report also includes per-category slices `hit_rate_by_category` and `mrr_by_category` for diagnosis (the gate enforces robust overall aggregates, not noisy per-category numbers).
 
@@ -128,12 +128,14 @@ Every golden question is answered by one passage of one document, and the eval d
 
 | Backend | Variant | Hop recall | Both hops | Answer both | Searches | Golden hit | Golden searches |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TF-IDF | single_pass | 0.719 | 0.562 | 0.438 | 1.00 | 1.000 | 1.00 |
-| TF-IDF | decompose | 0.875 | 0.750 | 0.500 | 3.00 | 1.000 | 1.09 |
-| TF-IDF | retry | 0.719 | 0.562 | 0.438 | 1.00 | 1.000 | 1.00 |
-| TF-IDF | **full** (default) | **0.875** | **0.750** | **0.500** | 3.06 | **1.000** | **1.09** |
-| Hybrid | single_pass | 0.875 | 0.750 | 0.438 | 1.00 | 1.000 | 1.00 |
-| Hybrid | **full** (default) | **0.906** | **0.812** | **0.500** | 3.06 | **1.000** | **1.09** |
+| TF-IDF | single_pass | 0.719 | 0.562 | 0.500 | 1.00 | 1.000 | 1.00 |
+| TF-IDF | decompose | 0.875 | 0.750 | 0.688 | 3.00 | 1.000 | 1.09 |
+| TF-IDF | retry | 0.719 | 0.562 | 0.500 | 1.00 | 1.000 | 1.00 |
+| TF-IDF | **full** (default) | **0.875** | **0.750** | **0.688** | 3.06 | **1.000** | **1.09** |
+| Hybrid | single_pass | 0.875 | 0.750 | 0.562 | 1.00 | 1.000 | 1.00 |
+| Hybrid | **full** (default) | **0.906** | **0.812** | **0.688** | 3.06 | **1.000** | **1.09** |
+
+"Answer both" is measured with the extractive writer's sentence choice described in finding 4. Before that change it was 0.438 (single_pass) and 0.500 (full) on both backends.
 
 **With a local LLM** (Qwen/Qwen3-8B served by `adip.serving` on one A100, thinking off; TF-IDF; offline, not in CI):
 
@@ -160,8 +162,16 @@ What this shows, including what it doesn't:
 1. **Decomposition does the work.** Searching once per sub-question takes "both hops retrieved" from 9/16 to 12/16 on TF-IDF and from 12/16 to 13/16 on hybrid. Single-hop questions lose nothing: hit rate stays 1.0, because the whole question is still searched first, and only 2 of 47 are split (both really are two questions), so they average 1.09 searches.
 2. **Coverage-triggered follow-ups barely fire at the pre-set threshold.** With the threshold at 0.3, a follow-up runs on 0 of 47 single-hop questions and 1 of 16 probes, so `retry` alone changes nothing. Whole-question coverage does not separate single-hop from multi-hop questions well, because single-hop paraphrases ("Can I make a website delete everything it knows about me?") also share few words with their answer. An earlier version that searched for rare missing words at a looser threshold fired on most questions, with useless queries such as "let" and "final". The follow-up path stays in, since it is cheap and gated by its own acceptance check, but this eval doesn't support claiming more for it.
 3. **What still fails is the wrong section of the right document.** In three of the four TF-IDF misses, the sub-question's search lands in the right long RFC or NIST document but on a neighbouring chunk (an OAuth chunk about endpoints, not the sentence requiring TLS). In the fourth, the right chunk is fifth in its sub-question's results and falls outside the 5-slot evidence cap. Lexical coverage can't tell a neighbouring chunk from the right one. Per-sub-question cross-encoder reranking or an LLM verifier are the obvious next steps.
-4. **The extractive writer is the answer-level bottleneck.** In 5 of the 12 TF-IDF cases where both hops are retrieved, the answer still misses one. The supporting chunk is in the top 2, but the writer's one-sentence pick from it lands elsewhere (no plural folding, and a bonus for "We present ..." sentences). With the extractive writer, "answer both" moves only from 0.438 to 0.500.
-5. **With an LLM writer the evidence gain reaches the answers.** Qwen3-8B reads all five evidence chunks, and the loop takes "answer covers both hops" from 0.625 to 0.688 and hop coverage from 0.781 to 0.844, for 0.2 s more (the writer dominates latency). Caveat: an 8B writer answers some hops from its own knowledge. Single-pass answer coverage (0.625) is higher than its evidence support (0.562), so with an LLM writer this metric is not purely a grounding measure; faithfulness and citation checks are the guard for that.
+4. **The extractive writer was the answer-level bottleneck, and better sentence choice closes most of the gap.** For a question, the writer shows one sentence from each of its top 3 evidence chunks. In 5 of the 12 TF-IDF probes with both hops retrieved (mh07, mh08, mh12, mh14, mh16), the supporting chunk was in the top 2 but the chosen sentence missed the fact, so "answer both" moved only from 0.438 to 0.500. The sentence scorer now uses the shared `content_terms` (stopwords, plural folding) plus `-ed`/`-ing` folding, and weights each term by its IDF over the evidence sentences. It scores a sentence against the best single part of a multi-part question, prefers "We present ..." sentences only for summary requests ("tell me about this paper", briefs), and splits legal "(a) ...; (b) ..." lists into separate items. Before → after:
+   - **TF-IDF full:** answer both 0.500 → 0.688, answer hop coverage 0.688 → 0.781. Counting only hops that were also retrieved, 7 → 10 of 16 probes (10 of the 12 with both hops retrieved). Fixed: mh08 (the "We present" bonus no longer beats the "152 layers" sentence), mh14 ("remove" now matches "removed"), and mh16 (a framing sentence no longer outscores the list of characteristics on the word "system", which the list spells "systems"). The full-variant score now equals Qwen3-8B's (0.688, finding 5), but Qwen's single-pass score is higher (0.625 against 0.500).
+   - **Hybrid full:** 0.500 → 0.688; retrieved-and-covered 6 → 10 of 16 (mh02, mh08, mh14, mh16).
+   - **Single pass:** TF-IDF 0.438 → 0.500 and hybrid 0.438 → 0.562. Retrieved-and-covered stays 6 of 16 on TF-IDF (the only TF-IDF changes are word-overlap coincidences, below) and goes 5 → 7 on hybrid (mh02, mh14).
+   - **CI golden set** (this writer is the gate's writer): expected coverage 0.804 → 0.826, with two questions gaining (BERT "stand for and how is it pre-trained", GDPR erasure grounds; 0.0 → 0.5 each) and none losing. Mean faithfulness moves 0.595 → 0.596 (up on 13 questions, down on 19, because it measures token grounding of whichever sentence is shown). The other gate metrics are unchanged.
+   - **Got worse:** mh12 in the single-pass variants (TF-IDF single_pass and retry, hybrid single_pass) loses its second hop. The old answer "covered" Article 17's "no longer necessary in relation to the purposes" with 3 of its 4 words: "longer" from the question, which the answer repeats, and "relation" and "purposes" from Article 5's items (a) and (b), the wrong document. Once the list is split, that Article 5 sentence is no longer shown. On hybrid, mh15 (full) and mh01 (single_pass) lose a hop that was never retrieved. In the other direction, mh01 (TF-IDF single_pass and retry) and mh15 (hybrid single_pass) gain one the same way. "Answer both" is a token-overlap check and moves with such coincidences; the retrieved-and-covered counts above don't.
+   - **Still missed:** mh07 and mh12 on both backends, mh13 on hybrid. Chunk text has no line breaks, so a markdown heading is glued to the first sentence ("# NIST Cybersecurity Framework (CSF) 2.0 - Core Functions The NIST Cybersecurity Framework 2.0 organizes ..."), and its title words outscore "Respond: take action regarding a detected cybersecurity incident." The same happens with GDPR Articles 5 and 17. That is better fixed at ingestion, by keeping line breaks, than in the writer. In hybrid mh13 the DNS chunk is fifth in the evidence, and the extractive answer shows only the top 3.
+   - **Tie-break:** with folding and IDF in place, two replacements for the old "length closest to 180 characters" tie-break were measured: earliest sentence (TF-IDF full answer both 0.562) and most terms beyond the question (0.688, but it loses mh03, and its mh01 gain is a coincidence). The length rule kept every fix with no losses, so it stays as the last tie-break.
+   - **Caveat:** these rules were developed while reading the five failing probes, so the probe gains are in-sample. The golden set is the out-of-sample check, and it moved up slightly with no question lost. The gate now also holds `multihop_full_answer_full_coverage` at a 0.6 floor.
+5. **With an LLM writer the evidence gain also reaches the answers.** Qwen3-8B reads all five evidence chunks, and the loop takes "answer covers both hops" from 0.625 to 0.688 and hop coverage from 0.781 to 0.844, for 0.2 s more (the writer dominates latency). Caveat: an 8B writer answers some hops from its own knowledge. Single-pass answer coverage (0.625) is higher than its evidence support (0.562), so with an LLM writer this metric is not purely a grounding measure; faithfulness and citation checks are the guard for that.
 6. **The 8B LLM decomposer is not better than the rules here.** It gets 11/16 both-hops against 12/16. It left the two "statement. question" bridge probes whole, split simple questions that didn't need it ("What obligations does the EU AI Act impose on high-risk AI systems?"), and adds about 14 s per question (including the optional LLM verifier, which a configured reasoning model turns on). Rules stay the default; `decomposer=llm` remains for stronger planner models.
 
 ## Earlier Benchmark Snapshot (self-authored corpus)
@@ -220,7 +230,7 @@ The same golden set drives answer-quality (generation) evaluation, not just retr
 - expected coverage (did the answer surface the row's `expected_substrings`),
 - citation coverage.
 
-It is deterministic with the extractive baseline, so the numbers are reproducible in CI, and any hosted or local writer can be swapped in for model comparisons. On the **real public-document corpus** (`data/eval/`) the baseline scores about 0.60 faithfulness, 0.96 grounded rate, and 0.80 expected coverage — see the table above. The latest report is exposed at `GET /monitoring/generation-eval` and on the dashboard's Answer Quality tiles.
+It is deterministic with the extractive baseline, so the numbers are reproducible in CI, and any hosted or local writer can be swapped in for model comparisons. On the **real public-document corpus** (`data/eval/`) the baseline scores about 0.60 faithfulness, 0.94 grounded rate, and 0.83 expected coverage — see the table above. The latest report is exposed at `GET /monitoring/generation-eval` and on the dashboard's Answer Quality tiles.
 
 An optional **LLM-as-judge** pass (`--judge-model-name ...`) scores the same answers semantically and reports agreement with the lexical proxy (mean absolute gap + Pearson correlation) — see [LLMOPS.md](LLMOPS.md#llm-as-judge-optional-second-opinion). Judge metrics appear only when a judge ran, so CI stays deterministic.
 
