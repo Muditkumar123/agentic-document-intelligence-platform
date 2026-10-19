@@ -17,7 +17,8 @@ from adip.rag.coverage import (
     weighted_coverage,
 )
 from adip.rag.decompose import parse_sub_questions, split_question
-from adip.rag.retriever import RagIndex
+from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
+from adip.rag.retriever import RagIndex, RetrievedChunk
 
 SUPPORTED_DECOMPOSERS = {"none", "rules", "llm"}
 
@@ -181,7 +182,7 @@ def retrieve_evidence(state: AgentState, index: RagIndex) -> AgentState:
     stats = term_statistics_for(index) if any(q["reason"] == "follow_up" for q in queries) else None
 
     for query in queries:
-        found = index.search(query["query"], top_k=state.top_k, document_filter=state.document_filter)
+        found = search_stream(state, index, query["query"])
         results = [item.to_dict() for item in found]
         accepted = True
         if query["reason"] == "follow_up":
@@ -220,6 +221,25 @@ def retrieve_evidence(state: AgentState, index: RagIndex) -> AgentState:
     state.metrics["retrieval_call_count"] = int(state.metrics.get("retrieval_call_count", 0)) + len(queries)
     state.metrics["retrieval_elapsed_ms"] = state.retrieval_elapsed_ms
     return state
+
+
+def search_stream(state: AgentState, index: RagIndex, query: str) -> list[RetrievedChunk]:
+    """One search, reranked against the same query when a reranker is configured.
+
+    Reranking per stream, not once for the whole question, is what lets a sub-question
+    pick the right section of a long document rather than its most keyword-dense one.
+    """
+    if state.reranker == "none":
+        return index.search(query, top_k=state.top_k, document_filter=state.document_filter)
+    candidate_k = resolve_candidate_k(state.top_k, state.rerank_candidate_k, state.reranker)
+    candidates = index.search(query, top_k=candidate_k, document_filter=state.document_filter)
+    return rerank_results(
+        query,
+        candidates,
+        reranker=state.reranker,
+        top_k=state.top_k,
+        cross_encoder_model=state.rerank_model or DEFAULT_CROSS_ENCODER_MODEL,
+    )
 
 
 def assemble_evidence(state: AgentState) -> list[dict[str, Any]]:

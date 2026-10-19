@@ -30,7 +30,7 @@ from adip.llmops.generation_eval import score_answer
 from adip.llmops.models import meaningful_terms
 from adip.llmops.pipeline import build_evidence
 from adip.rag.chunks import read_chunks_jsonl
-from adip.rag.retriever import RagIndex, build_index
+from adip.rag.retriever import RagIndex, build_index, load_index
 
 DEFAULT_PROBES_PATH = Path("data/eval/multihop_probes.jsonl")
 DEFAULT_CORPUS_DIRS = (Path("data/eval/raw"), Path("data/eval/long"))
@@ -191,8 +191,14 @@ def build_corpus_index(
     backend: str = "tfidf",
     chunk_size: int = 800,
     chunk_overlap: int = 120,
+    embedding_model: str = "lsa",
+    vector_store: str = "memory",
 ) -> RagIndex:
-    """Ingest every corpus directory, index the combined chunks, and save the index under ``work_dir``."""
+    """Ingest every corpus directory, index the combined chunks, and save the index under ``work_dir``.
+
+    The returned index is the one loaded back from disk, so a vector-store index is
+    measured exactly as it would be served.
+    """
     work_dir.mkdir(parents=True, exist_ok=True)
     chunks: list[dict[str, Any]] = []
     for position, corpus_dir in enumerate(corpus_dirs):
@@ -204,6 +210,46 @@ def build_corpus_index(
             chunk_overlap=chunk_overlap,
         )
         chunks.extend(read_chunks_jsonl(chunks_path))
-    index = build_index(chunks, backend=backend, use_faiss=False)
-    index.save(work_dir / f"index_{backend}")
-    return index
+    index = build_index(
+        chunks, backend=backend, use_faiss=False, embedding_model=embedding_model, vector_store=vector_store
+    )
+    index_dir = work_dir / f"index_{backend}_{embedding_model.replace('/', '_')}_{vector_store}"
+    index.save(index_dir)
+    if index.vector_store_client is not None:
+        index.vector_store_client.close()
+    return load_index(index_dir)
+
+
+def paraphrase_retrieval(
+    index: RagIndex,
+    rows: Sequence[dict[str, Any]],
+    top_k: int = 5,
+    reranker: str = "none",
+    rerank_model: str | None = None,
+) -> dict[str, float]:
+    """hit@k and MRR on questions reworded away from the corpus vocabulary (one search each)."""
+    from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
+
+    hits: list[float] = []
+    reciprocal: list[float] = []
+    for row in rows:
+        candidates = index.search(row["question"], top_k=resolve_candidate_k(top_k, None, reranker))
+        retrieved = rerank_results(
+            row["question"],
+            candidates,
+            reranker=reranker,
+            top_k=top_k,
+            cross_encoder_model=rerank_model or DEFAULT_CROSS_ENCODER_MODEL,
+        )
+        expected = [_normalized(text) for text in row.get("expected_substrings", [])]
+        rank = next(
+            (
+                position
+                for position, item in enumerate(retrieved, start=1)
+                if any(text in _normalized(item.chunk["text"]) for text in expected)
+            ),
+            None,
+        )
+        hits.append(1.0 if rank else 0.0)
+        reciprocal.append(1.0 / rank if rank else 0.0)
+    return {"question_count": float(len(rows)), "hit_rate": _mean(hits), "mrr": _mean(reciprocal)}

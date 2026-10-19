@@ -97,6 +97,9 @@ def run_agent_from_index_path(
     max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS,
     retrieval_time_budget_ms: float = DEFAULT_RETRIEVAL_TIME_BUDGET_MS,
     coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD,
+    reranker: str = "none",
+    rerank_model: str | None = None,
+    rerank_candidate_k: int | None = None,
 ) -> AgentResult:
     index = load_index(index_path)
     return run_agent(
@@ -134,6 +137,9 @@ def run_agent_from_index_path(
         max_retrieval_calls=max_retrieval_calls,
         retrieval_time_budget_ms=retrieval_time_budget_ms,
         coverage_threshold=coverage_threshold,
+        reranker=reranker,
+        rerank_model=rerank_model,
+        rerank_candidate_k=rerank_candidate_k,
     )
 
 
@@ -173,6 +179,9 @@ def run_agent(
     max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS,
     retrieval_time_budget_ms: float = DEFAULT_RETRIEVAL_TIME_BUDGET_MS,
     coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD,
+    reranker: str = "none",
+    rerank_model: str | None = None,
+    rerank_candidate_k: int | None = None,
     routes: AgentRoutes | None = None,
 ) -> AgentResult:
     if top_k <= 0:
@@ -218,6 +227,9 @@ def run_agent(
         max_retrieval_calls=max_retrieval_calls,
         retrieval_time_budget_ms=retrieval_time_budget_ms,
         coverage_threshold=coverage_threshold,
+        reranker=reranker,
+        rerank_model=rerank_model,
+        rerank_candidate_k=rerank_candidate_k,
         metrics={
             "index_backend": index.backend,
             "index_chunk_count": len(index.chunks),
@@ -238,6 +250,8 @@ def run_agent(
             "max_retrieval_calls": max_retrieval_calls,
             "retrieval_time_budget_ms": retrieval_time_budget_ms,
             "coverage_threshold": coverage_threshold,
+            "reranker": reranker,
+            "rerank_model": rerank_model if reranker == "cross_encoder" else None,
         },
     )
 

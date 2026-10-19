@@ -67,6 +67,10 @@ class AgentState:
     max_retrieval_calls: int = DEFAULT_MAX_RETRIEVAL_CALLS
     retrieval_time_budget_ms: float = DEFAULT_RETRIEVAL_TIME_BUDGET_MS
     coverage_threshold: float = DEFAULT_COVERAGE_THRESHOLD
+    # Second-stage reranking of every search stream against that stream's own query.
+    reranker: str = "none"
+    rerank_model: str | None = None
+    rerank_candidate_k: int | None = None
     sub_questions: list[str] = field(default_factory=list)
     pending_queries: list[dict[str, Any]] = field(default_factory=list)
     retrieval_streams: list[dict[str, Any]] = field(default_factory=list)

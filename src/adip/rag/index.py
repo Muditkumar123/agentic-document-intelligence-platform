@@ -45,7 +45,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--embedding-model",
         default="lsa",
-        help="Dense embedding model. Use `lsa` for dependency-light dense retrieval.",
+        help=(
+            "Dense embedding model: `lsa` (dependency-light), `bge-m3`, `qwen3-embedding-0.6b`, "
+            "or a Hugging Face id (needs the [retrieval] extra)."
+        ),
+    )
+    parser.add_argument(
+        "--vector-store",
+        choices=["memory", "qdrant"],
+        default="memory",
+        help="Where dense vectors live: in the index archive, or in Qdrant (embedded, or ADIP_QDRANT_URL).",
     )
     parser.add_argument(
         "--dense-dimensions",
@@ -85,6 +94,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         use_faiss=not args.no_faiss,
         rrf_k=args.rrf_k,
         hybrid_dense_weight=args.hybrid_dense_weight,
+        vector_store=args.vector_store,
     )
     index.save(args.index)
     print(

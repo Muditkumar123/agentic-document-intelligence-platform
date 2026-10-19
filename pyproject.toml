@@ -28,9 +28,12 @@ api = [
 ]
 retrieval = [
   "faiss-cpu",
-  "sentence-transformers",
+  "sentence-transformers>=5.0",
   "torch",
   "transformers>=4.51.0",
+]
+vectordb = [
+  "qdrant-client>=1.12",
 ]
 agents = [
   "langgraph>=0.2",

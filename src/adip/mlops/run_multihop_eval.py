@@ -29,6 +29,7 @@ from adip.agents.multihop_eval import (
     aggregate_golden,
     aggregate_multihop,
     build_corpus_index,
+    paraphrase_retrieval,
     read_probes,
     score_golden_case,
     score_multihop_case,
@@ -55,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--corpus-dir", type=Path, action="append", dest="corpus_dirs", default=None)
     parser.add_argument("--work-dir", type=Path, default=Path("data/processed/multihop_eval"))
     parser.add_argument("--backend", choices=["tfidf", "dense", "hybrid"], default="tfidf")
+    parser.add_argument(
+        "--embedding-model",
+        default="lsa",
+        help="Dense/hybrid embeddings: lsa (default), bge-m3, qwen3-embedding-0.6b, or a Hugging Face id.",
+    )
+    parser.add_argument("--vector-store", choices=["memory", "qdrant"], default="memory")
+    parser.add_argument("--reranker", choices=["none", "lexical", "cross_encoder"], default="none")
+    parser.add_argument("--rerank-model", default=None, help="Cross-encoder model, e.g. BAAI/bge-reranker-v2-m3.")
+    parser.add_argument("--paraphrases", type=Path, default=Path("data/eval/paraphrase_probes.jsonl"))
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--variants", nargs="+", choices=sorted(VARIANTS), default=list(VARIANTS))
     parser.add_argument("--engine", choices=["auto", "langgraph", "sequential"], default="auto")
@@ -146,6 +156,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     corpus_dirs = args.corpus_dirs or list(DEFAULT_CORPUS_DIRS)
     variants = {name: dict(VARIANTS[name]) for name in args.variants}
+    retrieval = {"reranker": args.reranker, "rerank_model": args.rerank_model}
+    for options in variants.values():
+        options.update(retrieval)
     if args.decomposer == "llm":
         if not (args.reasoning_model_name or args.reasoning_model_profile):
             raise SystemExit("--decomposer llm needs --reasoning-model-name or --reasoning-model-profile")
@@ -159,6 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "reasoning_api_key": args.reasoning_api_key,
             "reasoning_max_new_tokens": args.reasoning_max_new_tokens,
             "reasoning_device": args.reasoning_device,
+            **retrieval,
         }
 
     with start_run(
@@ -166,7 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_dir=args.run_dir,
         enable_mlflow=args.enable_mlflow,
         mlflow_tracking_uri=args.mlflow_tracking_uri,
-        tags={"pipeline": "agent", "backend": args.backend},
+        tags={"pipeline": "agent", "backend": args.backend, "embedding_model": args.embedding_model},
     ) as run:
         run.log_params(
             {
@@ -174,6 +188,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "golden": str(args.golden),
                 "corpus_dirs": [str(path) for path in corpus_dirs],
                 "backend": args.backend,
+                "embedding_model": args.embedding_model,
+                "vector_store": args.vector_store,
+                "reranker": args.reranker,
+                "rerank_model": args.rerank_model or "",
                 "top_k": args.top_k,
                 "variants": list(variants),
                 "engine": args.engine,
@@ -191,7 +209,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "api_key": args.writer_api_key,
                 "max_new_tokens": args.writer_max_new_tokens,
             }
-        index = build_corpus_index(corpus_dirs, args.work_dir, backend=args.backend)
+        build_started = time.perf_counter()
+        index = build_corpus_index(
+            corpus_dirs,
+            args.work_dir,
+            backend=args.backend,
+            embedding_model=args.embedding_model,
+            vector_store=args.vector_store,
+        )
+        index_build_ms = (time.perf_counter() - build_started) * 1000
         probes = read_probes(args.probes)
         golden = [] if args.skip_golden else [row for row in read_golden(args.golden) if row.get("answerable", True)]
         results = [
@@ -199,6 +225,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             for name, options in variants.items()
         ]
         metrics = flatten_metrics(results, len(index.chunks))
+        paraphrase = {}
+        if args.paraphrases.exists():
+            paraphrase = paraphrase_retrieval(
+                index, read_golden(args.paraphrases), args.top_k, args.reranker, args.rerank_model
+            )
+            metrics.update({f"paraphrase_{key}": value for key, value in paraphrase.items()})
+        metrics["index_build_ms"] = index_build_ms
         run.log_metrics(metrics)
 
         args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
@@ -206,6 +239,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = {
             "config": {
                 "backend": args.backend,
+                "embedding_model": args.embedding_model,
+                "index_metadata": index.metadata,
+                "vector_store": args.vector_store,
+                "reranker": args.reranker,
+                "rerank_model": args.rerank_model,
                 "top_k": args.top_k,
                 "corpus_dirs": [str(path) for path in corpus_dirs],
                 "chunk_count": len(index.chunks),
@@ -213,6 +251,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "golden_question_count": len(golden),
             },
             "variants": results,
+            "paraphrase_retrieval": paraphrase,
+            "index_build_ms": index_build_ms,
         }
         args.report_output.parent.mkdir(parents=True, exist_ok=True)
         args.report_output.write_text(json.dumps(report, indent=2, sort_keys=True, default=str), encoding="utf-8")
@@ -220,6 +260,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         run.log_artifact("report", args.report_output)
 
     print(format_table(results))
+    if paraphrase:
+        print(f"paraphrase probes: hit@{args.top_k} {paraphrase['hit_rate']:.3f}  MRR {paraphrase['mrr']:.3f}")
     print(json.dumps({"metrics_output": str(args.metrics_output), "mlops_run_path": str(run.run_path)}, indent=2))
     return 0
 

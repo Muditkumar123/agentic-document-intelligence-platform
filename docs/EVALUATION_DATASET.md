@@ -192,6 +192,60 @@ What this shows, including what it doesn't:
 5. **With an LLM writer the evidence gain also reaches the answers.** Qwen3-8B reads all five evidence chunks. The loop takes "answer covers both hops" from 0.625 to 0.750 and hop coverage from 0.781 to 0.875, at the same latency (8.4 s and 8.0 s; the writer dominates latency). Counting only hops that were also retrieved, it goes from 7 to 9 of 16 probes. One probe in the 0.750, mh05, is a wrong answer that matches by word overlap (see above). Of the 12 full-variant probes with both hops retrieved, Qwen's answer misses a hop in three. In mh03 and mh11 the first hop is a premise that the question already states ("OAuth 2.0 describes access tokens as credentials."), and Qwen answers only what is asked. In mh13 it writes "63 octets", but the check wants "63 octets or less" and doesn't count numbers. All three answers are right about what was asked. The extractive writer quotes evidence sentences and misses only mh03, so on this token-overlap metric it scores above Qwen (11 against 9 of 16). Caveat: an 8B writer answers some hops from its own knowledge. Single-pass answer coverage (0.625) is higher than its evidence support (0.562), so with an LLM writer this metric is not purely a grounding measure; faithfulness and citation checks are the guard for that.
 6. **The 8B LLM decomposer is not better than the rules here.** It gets 11/16 both-hops against 12/16, and 8 against 9 of 16 retrieved and covered. It left the two "statement. question" bridge probes whole (mh03, mh04), split simple questions that didn't need it ("What obligations does the EU AI Act impose on high-risk AI systems?"), and adds about 13.5 s per question (including the optional LLM verifier, which a configured reasoning model turns on). Rules stay the default; `decomposer=llm` remains for stronger planner models.
 
+## Modern Retrieval: Neural Embeddings, a Reranker, and a Vector Store
+
+The baseline retrievers are TF-IDF, LSA, and BM25: fast, deterministic, and CI-friendly, but lexical. This section adds the parts a current RAG stack would use and measures each one against the evaluations above.
+
+**What was added**
+
+- **Neural embeddings** (`adip/rag/embeddings.py`):
+  - `bge-m3` (BAAI, 568M parameters, 1024 dimensions). Its weights load from Hugging Face's official safetensors conversion (`refs/pr/130`), because the main branch ships only a pickle-based `pytorch_model.bin`, which current transformers refuses on torch < 2.6.
+  - `qwen3-embedding-0.6b` (Qwen, 1024 dimensions). Queries get its retrieval instruction through `encode_query`.
+  - Any other Hugging Face id is passed through. Models load once per process, in fp16 on GPU, and only from the local cache unless `ADIP_ALLOW_MODEL_DOWNLOAD=1`.
+- **Reranker** (`--reranker cross_encoder --rerank-model BAAI/bge-reranker-v2-m3`): in the agent loop every search stream is reranked against its own query, taking 15 candidates down to the top 5, so each sub-question chooses its section of a long document. The cross-encoder now sees up to the model's limit, capped at 1,024 tokens, instead of a fixed 512; chunks run to about 1,000 tokens, so the old cut hid half of each one.
+- **Vector store** (`--vector-store qdrant`, `adip/rag/vector_store.py`): the dense vectors move out of the index archive into Qdrant, either embedded in the index folder or on a server via `ADIP_QDRANT_URL`. Search is nearest-neighbour with the document filter pushed down as a point-id filter, and hybrid fuses BM25 with Qdrant's top 100.
+
+**Results.** Same corpus (173 chunks), 16 two-document probes, 47 single-hop golden questions, and 20 reworded questions (`paraphrase_probes.jsonl`, scored on one search each). Extractive writer, rule-based decomposer, `top_k` 5, one A100. "Loop" is the default agent (decomposition plus follow-ups); latency is per two-document question with the loop.
+
+| Retrieval | Both hops, single pass → loop | Hop recall (loop) | Answer both (loop) | Golden hit / expected coverage | Reworded hit@5 / MRR | Latency |
+| --- | --- | --- | --- | --- | --- | --- |
+| TF-IDF (default) | 0.562 → 0.750 | 0.875 | 0.812 | 1.000 / 0.833 | 0.750 / 0.627 | 45 ms |
+| Dense, bge-m3 | 0.500 → 0.625 | 0.750 | 0.625 | 1.000 / 0.833 | 0.900 / 0.900 | 96 ms |
+| Dense, Qwen3-Embedding-0.6B | 0.500 → **0.812** | 0.875 | 0.625 | 1.000 / **0.855** | **0.950** / 0.892 | 144 ms |
+| Hybrid, BM25 + bge-m3 | **0.812** → 0.750 | 0.875 | 0.812 | 1.000 / 0.822 | 0.750 / 0.685 | 91 ms |
+| Hybrid, BM25 + bge-m3, **Qdrant** | 0.812 → 0.750 | 0.875 | 0.812 | 1.000 / 0.822 | 0.750 / 0.685 | 104 ms |
+| Hybrid, BM25 + Qwen3-Embedding | 0.750 → 0.812 | 0.906 | 0.750 | 1.000 / 0.844 | 0.700 / 0.650 | 149 ms |
+| TF-IDF + bge reranker | 0.688 → **0.812** | **0.906** | **0.812** | 1.000 / 0.826 | 0.750 / 0.717 | 408 ms |
+| Dense bge-m3 + bge reranker | 0.625 → **0.812** | **0.906** | 0.750 | 1.000 / 0.808 | 0.850 / 0.792 | 476 ms |
+| Dense Qwen3 + bge reranker | 0.625 → **0.812** | **0.906** | **0.812** | 1.000 / 0.830 | 0.850 / 0.779 | 537 ms |
+| Hybrid bge-m3 + bge reranker | 0.688 → **0.812** | **0.906** | **0.812** | 1.000 / 0.826 | 0.750 / 0.750 | 478 ms |
+| Hybrid Qwen3 + bge reranker | 0.688 → **0.812** | **0.906** | **0.812** | 1.000 / 0.830 | 0.750 / 0.750 | 528 ms |
+
+What the table shows, including what it doesn't:
+
+1. **Neural embeddings fix reworded questions.** Dense retrieval finds the answer for 90% (bge-m3) to 95% (Qwen3-Embedding) of the reworded questions, against 75% for TF-IDF, with MRR rising from 0.63 to about 0.9. This is the clearest gain in the table.
+2. **Alone, they can miss exact technical terms.** With bge-m3, the loop gets both hops on 10 of 16 (TF-IDF: 12), because phrases like "401 (Unauthorized)" or "CertificateVerify" are lexical targets. Qwen3-Embedding doesn't have this problem (13 of 16).
+3. **An equal-weight hybrid gives most of the reworded gain back.** It drops to 0.70–0.75, because BM25's half of the fused ranking rewards word overlap, which reworded questions lack by design. Hybrid is best on single-pass two-document retrieval (bge-m3: 13 of 16). The fusion weight was not tuned on these sets.
+4. **The reranker is the most consistent multi-hop gain.** With it, every first-stage retriever reaches 13 of 16 both-hops and 0.906 hop recall with the loop, for about 0.35–0.45 s more per question on an A100. It also lowers dense retrieval's reworded recall (0.90/0.95 → 0.85).
+5. **The loop can hurt a strong single-pass retriever.** Hybrid bge-m3 gets 13 of 16 in one search, and the loop drops that to 12, because sub-question streams take evidence slots from the first search's results. With the reranker, the loop adds 2 questions on every retriever.
+6. **Qdrant changes where vectors live, not what is found.** Its rows are identical to in-memory search, at about 13 ms more per question for 173 chunks. Its value is operational: vectors outside the archive, a server mode, and filtered nearest-neighbour search that scales past an in-memory matrix.
+7. **With the extractive writer, dense evidence turns into fewer complete answers** (0.625 against 0.812). The writer still picks sentences by word overlap, so it does better with lexically retrieved chunks.
+
+**Recommendation.** For a GPU deployment, use dense Qwen3-Embedding-0.6B for reworded-question robustness, and add the bge reranker where multi-document precision matters more than about 0.4 s. The defaults stay TF-IDF, for two reasons: the CI gate must stay hermetic (no model downloads), and the Render demo has neither torch nor a GPU.
+
+**Caveats.**
+- The sets are small: one question moves a column by 0.06 (16 probes) or 0.05 (20 reworded questions).
+- Each row is a single run, with no per-configuration tuning.
+- GPU fp16 inference can flip near-ties between runs.
+
+```bash
+# one A100; models load from the local Hugging Face cache
+CUDA_VISIBLE_DEVICES=1 python -m adip.mlops.run_multihop_eval --variants single_pass full \
+  --backend dense --embedding-model qwen3-embedding-0.6b \
+  --reranker cross_encoder --rerank-model BAAI/bge-reranker-v2-m3   # optional
+# add --vector-store qdrant to keep the vectors in Qdrant (needs the [vectordb] extra)
+```
+
 ## Earlier Benchmark Snapshot (self-authored corpus)
 
 On the original 10-document self-authored corpus, after adding cross-encoder reranking (superseded by the public-document corpus above, kept for the reranking story):

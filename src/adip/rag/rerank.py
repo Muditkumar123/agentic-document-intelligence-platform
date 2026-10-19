@@ -14,6 +14,11 @@ from adip.rag.retriever import RetrievedChunk
 TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
 SUPPORTED_RERANKERS = {"none", "lexical", "cross_encoder"}
 DEFAULT_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# A current multilingual reranker (BAAI, 568M params, 8192-token context).
+BGE_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+# Pairs longer than this are truncated. Retrieval chunks run to ~1,000 tokens, so a
+# 512-token cut would hide the second half of every chunk from the reranker.
+MAX_CROSS_ENCODER_TOKENS = 1024
 MIN_RERANK_CANDIDATES = 10
 
 
@@ -173,7 +178,7 @@ def score_cross_encoder_pairs(
                 batch_texts,
                 padding=True,
                 truncation=True,
-                max_length=512,
+                max_length=bundle["max_length"],
                 return_tensors="pt",
             ).to(resolved_device)
             logits = model(**inputs).logits
@@ -208,12 +213,21 @@ def load_cross_encoder_bundle(
         model_name,
         local_files_only=local_files_only,
     )
+    if resolved_device.startswith("cuda"):
+        model.half()
     model.to(resolved_device)
     return {
         "tokenizer": tokenizer,
         "model": model,
         "device": resolved_device,
+        "max_length": cross_encoder_max_length(tokenizer),
     }
+
+
+def cross_encoder_max_length(tokenizer) -> int:
+    """The model's own limit, capped at ``MAX_CROSS_ENCODER_TOKENS`` (512 for MiniLM-style models)."""
+    limit = getattr(tokenizer, "model_max_length", None) or 512
+    return int(min(limit, MAX_CROSS_ENCODER_TOKENS))
 
 
 def validate_reranker(reranker: str) -> None:

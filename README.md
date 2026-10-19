@@ -17,10 +17,11 @@ Live demo: [agentic-document-intelligence.onrender.com](https://agentic-document
 - **Ingestion** for PDF, markdown and text with traceable chunking. An
   optional table-aware parser (unstructured.io) serializes table rows with
   their column headers so cells stay retrievable across chunk boundaries.
-- **Retrieval**: TF-IDF, dense (LSA by default, sentence-transformers +
-  FAISS optional) and hybrid (BM25 fused with dense rankings via
-  reciprocal-rank fusion), plus optional cross-encoder reranking and
-  multi-query rewriting.
+- **Retrieval**: TF-IDF, dense and hybrid (BM25 fused with dense rankings
+  via reciprocal-rank fusion). Dense uses LSA by default, or neural
+  embeddings (bge-m3 or Qwen3-Embedding-0.6B). Optional extras: a cross-encoder
+  reranker (bge-reranker-v2-m3) applied per search in the agent loop, a Qdrant
+  vector store (embedded or server), and multi-query rewriting.
 - **Agent loop** on LangGraph: intent_router, planner, retriever,
   evidence_verifier, writer, citation_checker. The planner splits multi-part
   questions into sub-questions, and the verifier sends the run back to the
@@ -55,7 +56,11 @@ unanswerable probes, so the numbers aren't overfit to project-authored text.
   eval corpus plus five full-length RFCs and NIST publications, 173 chunks),
   the agent loop raises "both pieces of evidence retrieved" from 0.56 to 0.75
   with TF-IDF, while single-hop questions keep a 1.0 hit rate at 1.09 searches
-  each. Gated in CI ([docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md#multi-hop-probes-and-the-retrieval-loop)).
+  each.
+- Neural retrieval, measured offline on one A100: Qwen3-Embedding raises
+  top-5 recall on reworded questions from 0.75 to 0.95, and the bge reranker
+  brings every retriever to 13 of 16 two-document questions fully retrieved
+  ([write-up](docs/EVALUATION_DATASET.md#modern-retrieval-neural-embeddings-a-reranker-and-a-vector-store)). Gated in CI ([docs/EVALUATION_DATASET.md](docs/EVALUATION_DATASET.md#multi-hop-probes-and-the-retrieval-loop)).
 - On a paraphrase probe set (reworded questions with no keyword overlap),
   plain TF-IDF gets 0.85 hit@5; hybrid retrieval plus LLM query rewriting
   reaches 1.00 hit@5 / 0.90 MRR.
@@ -86,7 +91,7 @@ python -m adip.api --host 127.0.0.1 --port 8010
 ```
 
 The dashboard is at `http://127.0.0.1:8010/` and the OpenAPI docs at `/docs`.
-Run the test suite with `pytest` (245 tests, hermetic, no GPU needed).
+Run the test suite with `pytest` (275 tests, hermetic, no GPU needed).
 
 ## API
 

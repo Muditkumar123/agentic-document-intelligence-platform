@@ -42,7 +42,7 @@ Deliverable:
 
 Next upgrade:
 
-- Install `sentence-transformers` and `faiss-cpu` for production semantic retrieval.
+- Install `sentence-transformers` and `faiss-cpu` for production semantic retrieval. Status: done. Neural embeddings (bge-m3 via its safetensors weights, Qwen3-Embedding-0.6B), a bge-reranker-v2-m3 cross-encoder applied per search in the agent loop, and a Qdrant vector store, all optional extras and measured offline (EVALUATION_DATASET.md). CI and the demo stay on TF-IDF.
 - Add reranking after top-k retrieval. Status: done — lexical and cross-encoder rerankers, with the first-stage candidate pool automatically widened to 3x top_k (min 10) whenever a reranker is enabled.
 - Add LLM-generated synthesis after retrieval.
 

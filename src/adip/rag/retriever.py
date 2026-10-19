@@ -15,6 +15,7 @@ from sklearn.metrics.pairwise import linear_kernel
 from sklearn.preprocessing import normalize
 
 from adip.rag.bm25 import DEFAULT_BM25_B, DEFAULT_BM25_K1, Bm25Index, build_bm25_index
+from adip.rag.embeddings import embedding_model_metadata, encode_documents, encode_queries
 from adip.rag.serialization import (
     IndexFormatError,
     decode_json,
@@ -34,6 +35,9 @@ INDEX_FORMAT = "adip-rag-index"
 INDEX_FORMAT_VERSION = 1
 FAISS_INDEX_FILENAME = "faiss.index"
 DENSE_BACKENDS = {"dense", "dense_lsa", "sentence_transformers"}
+VECTOR_STORES = {"memory", "qdrant"}
+# Hybrid fusion over a vector store sees only the store's nearest points, not every chunk.
+HYBRID_DENSE_CANDIDATES = 100
 HYBRID_BACKEND = "hybrid"
 DEFAULT_RRF_K = 60
 DEFAULT_HYBRID_DENSE_WEIGHT = 0.5
@@ -131,6 +135,9 @@ class RagIndex:
     bm25: Bm25Index | None = None
     rrf_k: int = DEFAULT_RRF_K
     hybrid_dense_weight: float = DEFAULT_HYBRID_DENSE_WEIGHT
+    # "memory": dense vectors live in ``matrix``; "qdrant": in ``vector_store_client``.
+    vector_store: str = "memory"
+    vector_store_client: Any | None = None
 
     @property
     def vocabulary_size(self) -> int:
@@ -196,7 +203,12 @@ class RagIndex:
             return []
 
         query_vector = self._embed_query(question)
-        if self.faiss_index is not None and document_filter is None:
+        if self.vector_store_client is not None:
+            allowed = candidate_indices if document_filter else None
+            hits = self.vector_store_client.search(query_vector[0], top_k, allowed_rows=allowed)
+            top_indices = [row for row, _ in hits]
+            score_values = [score for _, score in hits]
+        elif self.faiss_index is not None and document_filter is None:
             scores, indices = self.faiss_index.search(query_vector.astype("float32"), top_k)
             score_values = scores[0]
             top_indices = indices[0]
@@ -233,7 +245,7 @@ class RagIndex:
 
         bm25_scores = self.bm25.scores(question)
         dense_query = self._embed_query(question)
-        dense_scores = np.matmul(self.matrix, dense_query[0])
+        dense_scores = self._dense_scores(dense_query[0], candidate_indices, document_filter)
         dense_weight = self.hybrid_dense_weight
         fused = reciprocal_rank_fusion(
             score_lists=[bm25_scores, dense_scores],
@@ -254,9 +266,25 @@ class RagIndex:
             return self._single_document_fallback(question, top_k, chunks=fallback_chunks)
         return results
 
+    def _dense_scores(
+        self,
+        query_vector: np.ndarray,
+        candidate_indices: list[int],
+        document_filter: str | None,
+    ) -> np.ndarray:
+        """Cosine score per chunk. A vector store returns only its nearest points; the rest score 0."""
+        if self.vector_store_client is None:
+            return np.matmul(self.matrix, query_vector)
+        scores = np.zeros(len(self.chunks), dtype="float32")
+        allowed = candidate_indices if document_filter else None
+        limit = min(len(self.chunks), HYBRID_DENSE_CANDIDATES)
+        for row, score in self.vector_store_client.search(query_vector, limit, allowed_rows=allowed):
+            scores[row] = score
+        return scores
+
     def _embed_query(self, question: str) -> np.ndarray:
         if self.embedding_model and self.embedding_model != "lsa":
-            return encode_with_sentence_transformers([question], self.embedding_model)
+            return encode_queries([question], self.embedding_model)
         if self.vectorizer is None:
             raise ValueError("Dense LSA index is missing its vectorizer")
         sparse_query = self.vectorizer.transform([question])
@@ -300,6 +328,31 @@ class RagIndex:
             if matches_document_filter(chunk, document_filter)
         ]
 
+    def _save_vector_store(self, path: Path) -> dict[str, Any]:
+        """Write the dense vectors to a persistent Qdrant collection for ``path``; return where."""
+        from adip.rag.vector_store import (
+            COLLECTION,
+            QDRANT_DIRNAME,
+            QdrantVectorStore,
+            chunk_payload,
+            collection_for,
+            server_url,
+        )
+
+        url = server_url()
+        location = url or str(path / QDRANT_DIRNAME)
+        collection = collection_for(path) if url else COLLECTION
+        current = self.vector_store_client
+        if current is not None and current.location == location and current.collection == collection:
+            vectors = None  # this index was loaded from here; the collection is already in place
+        else:
+            vectors = self.matrix if self.matrix is not None else current.vectors()
+        if vectors is not None:
+            payloads = [chunk_payload(chunk) for chunk in self.chunks]
+            store = QdrantVectorStore.create(location, np.asarray(vectors, dtype="float32"), payloads, collection)
+            store.close()  # embedded mode locks its folder; release it so the index can be loaded
+        return {"kind": "qdrant", "mode": "server" if url else "embedded", "collection": collection}
+
     def save(self, index_dir: Path) -> None:
         """Persist as one pickle-free ``.npz`` archive (arrays + a JSON manifest)."""
         path = index_dir.expanduser()
@@ -314,7 +367,10 @@ class RagIndex:
             "rrf_k": self.rrf_k,
             "hybrid_dense_weight": self.hybrid_dense_weight,
             "chunks": self.chunks,
-            "matrix": pack_matrix("matrix", self.matrix, arrays),
+            "matrix": (
+                {"kind": "vector_store"} if self.vector_store == "qdrant" else pack_matrix("matrix", self.matrix, arrays)
+            ),
+            "vector_store": self._save_vector_store(path) if self.vector_store == "qdrant" else None,
             "vectorizer": None,
             "svd": self.svd is not None,
             "bm25": None,
@@ -354,15 +410,21 @@ def build_index(
     use_faiss: bool = True,
     rrf_k: int = DEFAULT_RRF_K,
     hybrid_dense_weight: float = DEFAULT_HYBRID_DENSE_WEIGHT,
+    vector_store: str = "memory",
 ) -> RagIndex:
+    if vector_store not in VECTOR_STORES:
+        raise ValueError(f"Unsupported vector store: {vector_store}")
     if backend == "tfidf":
+        if vector_store != "memory":
+            raise ValueError("The tfidf backend has no dense vectors to put in a vector store")
         return build_tfidf_index(chunks, ngram_max=ngram_max)
     if backend in DENSE_BACKENDS:
         return build_dense_index(
             chunks,
             embedding_model=embedding_model,
             dense_dimensions=dense_dimensions,
-            use_faiss=use_faiss,
+            use_faiss=use_faiss and vector_store == "memory",
+            vector_store=vector_store,
         )
     if backend == HYBRID_BACKEND:
         return build_hybrid_index(
@@ -371,6 +433,7 @@ def build_index(
             dense_dimensions=dense_dimensions,
             rrf_k=rrf_k,
             hybrid_dense_weight=hybrid_dense_weight,
+            vector_store=vector_store,
         )
     raise ValueError(f"Unsupported backend: {backend}")
 
@@ -418,6 +481,7 @@ def build_hybrid_index(
     hybrid_dense_weight: float = DEFAULT_HYBRID_DENSE_WEIGHT,
     bm25_k1: float = DEFAULT_BM25_K1,
     bm25_b: float = DEFAULT_BM25_B,
+    vector_store: str = "memory",
 ) -> RagIndex:
     if not 0.0 <= hybrid_dense_weight <= 1.0:
         raise ValueError("hybrid_dense_weight must be between 0 and 1")
@@ -431,7 +495,7 @@ def build_hybrid_index(
         svd = None
         matrix = encode_with_sentence_transformers(texts, embedding_model)
 
-    return RagIndex(
+    index = RagIndex(
         backend=HYBRID_BACKEND,
         vectorizer=vectorizer,
         matrix=matrix,
@@ -453,6 +517,22 @@ def build_hybrid_index(
             "matrix_shape": tuple(matrix.shape),
         },
     )
+    return attach_vector_store(index, vector_store)
+
+
+def attach_vector_store(index: RagIndex, vector_store: str) -> RagIndex:
+    """Record the neural model's id, and move the dense vectors into the chosen store."""
+    if index.embedding_model and index.embedding_model != "lsa":
+        index.metadata.update(embedding_model_metadata(index.embedding_model))
+    index.metadata["vector_store"] = vector_store
+    if vector_store == "qdrant":
+        from adip.rag.vector_store import QdrantVectorStore, chunk_payload
+
+        index.vector_store = "qdrant"
+        index.vector_store_client = QdrantVectorStore.create(
+            ":memory:", np.asarray(index.matrix, dtype="float32"), [chunk_payload(c) for c in index.chunks]
+        )
+    return index
 
 
 def build_tfidf_index(chunks: list[dict[str, Any]], ngram_max: int = 2) -> RagIndex:
@@ -486,6 +566,7 @@ def build_dense_index(
     embedding_model: str = "lsa",
     dense_dimensions: int = 128,
     use_faiss: bool = True,
+    vector_store: str = "memory",
 ) -> RagIndex:
     if dense_dimensions < 1:
         raise ValueError("dense_dimensions must be greater than or equal to 1")
@@ -501,7 +582,7 @@ def build_dense_index(
         backend = "sentence_transformers"
 
     faiss_index = build_faiss_index(matrix) if use_faiss else None
-    return RagIndex(
+    index = RagIndex(
         backend=backend,
         vectorizer=vectorizer,
         matrix=matrix,
@@ -518,6 +599,7 @@ def build_dense_index(
         },
         faiss_index=faiss_index,
     )
+    return attach_vector_store(index, vector_store)
 
 
 def build_lsa_embeddings(
@@ -545,20 +627,8 @@ def build_lsa_embeddings(
 
 
 def encode_with_sentence_transformers(texts: list[str], model_name: str) -> np.ndarray:
-    if importlib.util.find_spec("sentence_transformers") is None:
-        raise ImportError(
-            "sentence-transformers is required for embedding_model values other than `lsa`."
-        )
-    from sentence_transformers import SentenceTransformer
-
-    model = SentenceTransformer(model_name)
-    embeddings = model.encode(
-        texts,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-    )
-    return np.asarray(embeddings, dtype="float32")
+    """Document embeddings from a neural model (see ``adip.rag.embeddings``)."""
+    return encode_documents(texts, model_name)
 
 
 def normalize_dense_matrix(matrix: Any) -> np.ndarray:
@@ -716,6 +786,10 @@ def load_index(index_dir: Path) -> RagIndex:
         raise
     except (KeyError, TypeError, ValueError) as exc:
         raise IndexFormatError(f"Index file {path} is incomplete or corrupt: {exc}") from exc
+    if loaded.vector_store == "qdrant":
+        loaded.vector_store_client = open_vector_store(path.parent, decode_json(arrays["manifest"])["vector_store"])
+        if loaded.vector_store_client.count() != len(loaded.chunks):
+            raise IndexFormatError(f"Qdrant collection for {path.parent} does not match the index's chunks")
     faiss_path = path.parent / FAISS_INDEX_FILENAME
     if faiss_path.exists():
         faiss = import_optional_faiss()
@@ -754,8 +828,9 @@ def index_from_arrays(arrays: dict[str, np.ndarray]) -> RagIndex:
         )
 
     chunks = manifest["chunks"]
-    matrix = unpack_matrix("matrix", manifest["matrix"], arrays)
-    if matrix.shape[0] != len(chunks):
+    in_vector_store = manifest["matrix"].get("kind") == "vector_store"
+    matrix = None if in_vector_store else unpack_matrix("matrix", manifest["matrix"], arrays)
+    if matrix is not None and matrix.shape[0] != len(chunks):
         raise IndexFormatError(f"Index matrix has {matrix.shape[0]} rows but {len(chunks)} chunks")
     return RagIndex(
         backend=manifest["backend"],
@@ -768,4 +843,16 @@ def index_from_arrays(arrays: dict[str, np.ndarray]) -> RagIndex:
         bm25=bm25,
         rrf_k=int(manifest["rrf_k"]),
         hybrid_dense_weight=float(manifest["hybrid_dense_weight"]),
+        vector_store="qdrant" if in_vector_store else "memory",
     )
+
+
+def open_vector_store(index_dir: Path, entry: dict[str, Any]):
+    from adip.rag.vector_store import QDRANT_DIRNAME, QdrantVectorStore, server_url
+
+    if entry.get("mode") == "server":
+        url = server_url()
+        if not url:
+            raise FileNotFoundError(f"{index_dir} keeps its vectors on a Qdrant server; set ADIP_QDRANT_URL")
+        return QdrantVectorStore.open(url, entry["collection"])
+    return QdrantVectorStore.open(str(index_dir / QDRANT_DIRNAME), entry["collection"])
