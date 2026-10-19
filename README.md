@@ -120,3 +120,7 @@ size-limited, and indexes are stored without pickle. See the
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Container image and Render deployment |
 | [docs/API.md](docs/API.md) | Endpoint reference with examples |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What was built when, and what's next |
+
+## License
+
+Code: [MIT](LICENSE). The evaluation documents in `data/eval/` keep their own terms (EU legal texts, IETF RFCs, U.S. Government works, arXiv abstracts); see [data/eval/SOURCES.md](data/eval/SOURCES.md).
