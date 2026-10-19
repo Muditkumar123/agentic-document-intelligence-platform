@@ -115,7 +115,7 @@ The base pipeline is generic. Domain presets customize extraction fields, prompt
 
 1. User uploads or registers documents.
 2. Ingestion extracts text, metadata, and page references.
-3. Text is cleaned and split into chunks.
+3. Text is cleaned and split into word-window chunks that keep paragraph, heading and list line breaks.
 4. Chunks are embedded and stored in a vector index.
 5. User asks a question or requests a report.
 6. Retriever selects relevant chunks. Backends: TF-IDF (deterministic baseline), dense (LSA or sentence-transformers), and hybrid — BM25 and dense rankings fused with weighted reciprocal-rank fusion (rank-based, so no score-scale calibration is needed; fused scores are normalized so rank-1-in-both equals 1.0).

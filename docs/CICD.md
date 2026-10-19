@@ -37,9 +37,9 @@ Measured on the real public-document corpus (`data/eval/`):
 | --- | --- | --- | --- | --- |
 | retrieval | `hit_rate_at_k` | min | 0.85 | 1.00 |
 | retrieval | `mrr` | min | 0.80 | 1.00 |
-| generation | `gen_eval_mean_faithfulness` | min | 0.45 | 0.596 |
+| generation | `gen_eval_mean_faithfulness` | min | 0.45 | 0.583 |
 | generation | `gen_eval_grounded_rate` | min | 0.80 | 0.942 |
-| generation | `gen_eval_mean_expected_coverage` | min | 0.70 | 0.826 |
+| generation | `gen_eval_mean_expected_coverage` | min | 0.70 | 0.841 |
 | generation | `gen_eval_mean_answer_relevance` | min | 0.80 | 0.912 |
 | generation | `gen_eval_mean_citation_coverage` | min | 0.55 | 0.684 |
 | generation | `gen_eval_refusal_precision` | min | 0.80 | 1.00 |
@@ -48,11 +48,11 @@ Measured on the real public-document corpus (`data/eval/`):
 | multihop | `multihop_full_full_support_rate` | min | 0.65 | 0.75 |
 | multihop | `multihop_full_hop_recall` | min | 0.80 | 0.875 |
 | multihop | `multihop_full_full_support_gain` | min | 0.10 | 0.1875 |
-| multihop | `multihop_full_answer_full_coverage` | min | 0.60 | 0.6875 |
+| multihop | `multihop_full_answer_full_coverage` | min | 0.70 | 0.8125 |
 | multihop | `golden_full_hit_rate` | min | 0.95 | 1.00 |
 | multihop | `golden_full_avg_retrieval_calls` | max | 1.3 | 1.09 |
 
-The multihop group checks the agent's retrieval loop from both sides: it must beat the single-pass pipeline on two-document questions by at least 0.10 in full-support rate, and it must not cost single-hop questions their answers (hit rate) or many extra searches. `multihop_full_answer_full_coverage` checks the extractive writer: the share of probes whose answer contains both facts (0.500 before the writer's sentence choice was reworked, so a return to the old picks fails the gate).
+The multihop group checks the agent's retrieval loop from both sides: it must beat the single-pass pipeline on two-document questions by at least 0.10 in full-support rate, and it must not cost single-hop questions their answers (hit rate) or many extra searches. `multihop_full_answer_full_coverage` checks the extractive writer: the share of probes whose answer contains both facts. It was 0.500 before the writer's sentence choice was reworked and 0.6875 before chunks kept line breaks, so a return to either fails the gate.
 
 Generation eval runs with `--abstention-threshold 0.10`: the writer refuses when the best retrieved evidence score is below 0.10. `refusal_precision` / `refusal_recall` treat "should refuse" (the 10 unanswerable golden questions) as the positive class — so the gate enforces that abstention catches off-domain questions (recall) without falsely refusing real ones (precision). If abstention were accidentally disabled, recall would drop to 0 and fail the gate.
 

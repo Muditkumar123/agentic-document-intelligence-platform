@@ -312,6 +312,22 @@ def test_evaluate_reports_hit_rate(tmp_path):
     assert report["mrr"] == 1.0
 
 
+def test_evaluate_matches_expected_text_across_line_breaks(tmp_path):
+    chunks = [make_chunk("chunk_csf", "# NIST CSF\n\nRespond: take action regarding a\ndetected incident.")]
+    index_path = tmp_path / "vector_index"
+    build_index(chunks).save(index_path)
+    golden_path = tmp_path / "golden.jsonl"
+    golden_path.write_text(
+        json.dumps({"question": "Which function acts on an incident?", "expected_substrings": ["CSF Respond: take action"]})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = evaluate(index_path, golden_path, top_k=1)
+
+    assert report["hit_rate_at_k"] == 1.0
+
+
 def test_aggregate_by_category_slices_hit_rate_and_mrr():
     results = [
         {"category": "legal", "hit": True, "rank": 1},

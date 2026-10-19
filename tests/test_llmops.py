@@ -494,6 +494,69 @@ def test_legal_list_items_are_chosen_individually():
     assert "('storage limitation')" in sentence
 
 
+CSF_CHUNK = (
+    "# NIST Cybersecurity Framework (CSF) 2.0 - Core Functions\n\n"
+    "The NIST Cybersecurity Framework 2.0 organizes cybersecurity outcomes into six core Functions:\n\n"
+    "Detect: find and analyze possible cybersecurity attacks and compromises.\n\n"
+    "Respond: take action regarding a detected cybersecurity incident."
+)
+
+
+def test_heading_lines_are_not_answer_candidates():
+    assert split_evidence_sentences(CSF_CHUNK) == [
+        "The NIST Cybersecurity Framework 2.0 organizes cybersecurity outcomes into six core Functions:",
+        "Detect: find and analyze possible cybersecurity attacks and compromises.",
+        "Respond: take action regarding a detected cybersecurity incident.",
+    ]
+
+
+def test_one_line_text_from_older_indexes_keeps_its_heading_glued_sentence():
+    legacy = " ".join(CSF_CHUNK.split())
+
+    sentences = split_evidence_sentences(legacy)
+
+    assert sentences[0].startswith("# NIST Cybersecurity Framework (CSF) 2.0 - Core Functions The NIST")
+    assert sentences[-1] == "Respond: take action regarding a detected cybersecurity incident."
+
+
+def test_list_lead_in_ranks_below_the_items_it_introduces():
+    text = CSF_CHUNK.split("\n\n", 1)[1]
+    question = "Which NIST Cybersecurity Framework function covers acting on a detected incident?"
+    weights = evidence_term_weights([{"text": text}])
+
+    sentence = focus_sentence(text, question, term_weights=weights)
+
+    assert sentence == "Respond: take action regarding a detected cybersecurity incident."
+
+
+def test_heading_terms_count_for_every_sentence_under_the_heading():
+    text = (
+        "# GDPR Article 5 - Principles relating to processing of personal data\n\n"
+        "Article 5(1) of the GDPR sets out the principles relating to processing of personal data.\n\n"
+        "(d) accurate and, where necessary, kept up to date;\n\n"
+        "(e) kept in a form which permits identification of data subjects for no longer than is "
+        "necessary ('storage limitation');"
+    )
+    question = "Which GDPR principle limits how long personal data may be kept?"
+    weights = evidence_term_weights([{"text": text}])
+
+    sentence = focus_sentence(text, question, term_weights=weights)
+
+    assert sentence.startswith("(e) kept in a form")
+
+
+def test_own_terms_break_ties_between_sentences_sharing_a_heading():
+    text = (
+        "# HTTP Semantics: Safe and Idempotent Methods\n\n"
+        "A request method is considered idempotent if repeating it has the same effect as one request.\n\n"
+        "Request methods are considered safe if their defined semantics are essentially read-only."
+    )
+
+    sentence = focus_sentence(text, "Which HTTP request methods are considered safe?")
+
+    assert sentence.startswith("Request methods are considered safe")
+
+
 def test_generate_grounded_verification_returns_metrics():
     retrieved = [
         {

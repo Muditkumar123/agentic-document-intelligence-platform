@@ -10,6 +10,10 @@ from collections.abc import Iterable, Iterator
 from adip.ingestion.models import Chunk, Page
 
 TOKEN_PATTERN = re.compile(r"\S+")
+HEADING_LINE = re.compile(r"#{1,6}\s")
+# A line that starts its own block even without a blank line before it: a markdown
+# heading, a bullet or numbered list item, or a table row.
+STRUCTURAL_LINE = re.compile(r"#{1,6}\s|[-*+•]\s|\d{1,3}[.)]\s|\((?:[a-z]|[ivx]{1,4}|\d{1,2})\)\s|\|")
 
 
 def count_tokens(text: str) -> int:
@@ -18,23 +22,40 @@ def count_tokens(text: str) -> int:
 
 
 def normalize_text(text: str) -> str:
-    """Normalize parser output while keeping text readable for citations."""
-    lines = [line.strip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
-    paragraphs: list[str] = []
+    """Normalize parser output while keeping text readable for citations.
+
+    Wrapped lines (a PDF has one per visual line) are joined into one line per
+    paragraph. Line breaks are kept where they carry structure: a blank line
+    between paragraphs, and a single newline before a heading, list item or
+    table row, and after a heading. Other whitespace collapses to one space.
+    """
+    lines = [" ".join(line.split()) for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    parts: list[str] = []
     current: list[str] = []
+    blank_before = False
+
+    def flush() -> None:
+        nonlocal blank_before
+        if current:
+            if parts:
+                parts.append("\n\n" if blank_before else "\n")
+            parts.append(" ".join(current))
+            current.clear()
+            blank_before = False
 
     for line in lines:
         if not line:
-            if current:
-                paragraphs.append(" ".join(current))
-                current = []
+            flush()
+            blank_before = True
             continue
+        if STRUCTURAL_LINE.match(line):
+            flush()
         current.append(line)
+        if HEADING_LINE.match(line):
+            flush()
 
-    if current:
-        paragraphs.append(" ".join(current))
-
-    return "\n\n".join(paragraphs).strip()
+    flush()
+    return "".join(parts)
 
 
 def split_text(
@@ -42,7 +63,11 @@ def split_text(
     chunk_size: int = 800,
     chunk_overlap: int = 120,
 ) -> Iterator[tuple[str, int, int]]:
-    """Yield word-window chunks as `(text, start_word, end_word)`."""
+    """Yield word-window chunks as `(text, start_word, end_word)`.
+
+    A chunk's text is the slice of the normalized text from its first word to its
+    last, so it keeps the paragraph, heading and list line breaks between them.
+    """
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than 0")
     if chunk_overlap < 0:
@@ -50,7 +75,8 @@ def split_text(
     if chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be smaller than chunk_size")
 
-    words = TOKEN_PATTERN.findall(normalize_text(text))
+    normalized = normalize_text(text)
+    words = list(TOKEN_PATTERN.finditer(normalized))
     if not words:
         return
 
@@ -58,7 +84,7 @@ def split_text(
     start = 0
     while start < len(words):
         end = min(start + chunk_size, len(words))
-        yield " ".join(words[start:end]), start, end
+        yield normalized[words[start].start() : words[end - 1].end()], start, end
         if end == len(words):
             break
         start += step

@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 from urllib import error, request
 
+from adip.ingestion.chunking import HEADING_LINE, normalize_text
 from adip.rag.coverage import content_terms
 from adip.rag.decompose import split_question
 from adip.rag.retriever import looks_like_generic_document_request
@@ -60,6 +61,7 @@ NOISY_SENTENCE_PREFIXES = (
 # ("... shall be: (a) processed lawfully ...; (b) collected ..."), so each item
 # can be chosen on its own instead of the whole list being cut at the display limit.
 LIST_ITEM_OR_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|(?<=[;:])\s+(?=\([a-z0-9]{1,4}\)\s)")
+ABSTRACT_MARKER = re.compile(r"\sAbstract\s")
 
 CONTRIBUTION_PHRASES = (
     "in this paper",
@@ -870,13 +872,14 @@ def evidence_term_weights(evidence: list[dict[str, Any]]) -> dict[str, float]:
 
     The writer's job is choosing between these sentences, so a term found in many
     of them ("data", "TLS") says little about which one answers, and a term found
-    in few ("removed", "kept") picks the sentence out.
+    in few ("removed", "kept") picks the sentence out. A sentence counts the terms
+    of its heading too (see ``evidence_candidates``).
     """
     frequency: Counter[str] = Counter()
     sentence_count = 0
     for item in evidence:
-        for sentence in split_evidence_sentences(str(item["text"])):
-            frequency.update(selection_terms(sentence))
+        for _sentence, own_terms, heading_terms in evidence_candidates(str(item["text"])):
+            frequency.update(own_terms | heading_terms)
             sentence_count += 1
     return {
         term: math.log((sentence_count + 1) / (count + 1)) + 1.0
@@ -894,48 +897,86 @@ def evidence_focus_sentence(
     """The sentence of ``item`` that best answers one of ``query_parts``.
 
     Sentences are ranked by, in order: not boilerplate (keywords, funding, URLs);
-    for summary requests (``prefer_contributions``), stating the paper's
+    not a lead-in ending in ":", which introduces a list instead of stating a
+    fact; for summary requests (``prefer_contributions``), stating the paper's
     contribution ("We present ..."); the IDF-weighted sum of the terms matched
-    from the best single question part (each term weighs 1 without
-    ``term_weights``), so a sentence that answers one part beats one that grazes
-    both; and a displayed length close to 180 characters. Remaining ties go to
+    from the best single question part, counting the sentence's heading terms
+    (each term weighs 1 without ``term_weights``), so a sentence that answers one
+    part beats one that grazes both; the same sum over the sentence's own terms
+    only; and a displayed length close to 180 characters. Remaining ties go to
     the earliest sentence. The weighted sums use ``math.fsum``: a plain ``sum``
     over a set follows its iteration order, which changes with each process's
     string-hash seed, so equal totals could differ in the last bit and skip the
     length tie-break in some runs but not others.
     """
-    sentences = split_evidence_sentences(str(item["text"]))
-    if not sentences:
+    candidates = evidence_candidates(str(item["text"]))
+    if not candidates:
         return compact_text(str(item["text"]), max_chars=max_chars)
     weights = term_weights or {}
 
-    def rank(sentence: str) -> tuple[bool, bool, float, int]:
+    def matched_weight(terms: set[str]) -> float:
+        return max(math.fsum(weights.get(term, 1.0) for term in terms & part) for part in query_parts)
+
+    def rank(candidate: tuple[str, set[str], set[str]]) -> tuple[bool, bool, bool, float, float, int]:
+        sentence, own_terms, heading_terms = candidate
         lowered = sentence.lower()
-        terms = selection_terms(sentence)
-        relevance = max(math.fsum(weights.get(term, 1.0) for term in terms & part) for part in query_parts)
         contribution = prefer_contributions and any(phrase in lowered for phrase in CONTRIBUTION_PHRASES)
         length_fit = -abs(min(len(sentence), max_chars) - 180)
-        return (not lowered.startswith(NOISY_SENTENCE_PREFIXES), contribution, relevance, length_fit)
+        return (
+            not lowered.startswith(NOISY_SENTENCE_PREFIXES),
+            not sentence.endswith(":"),
+            contribution,
+            matched_weight(own_terms | heading_terms),
+            matched_weight(own_terms),
+            length_fit,
+        )
 
-    best = max(sentences, key=rank)
-    return compact_text(best, max_chars=max_chars)
+    best = max(candidates, key=rank)
+    return compact_text(best[0], max_chars=max_chars)
+
+
+def evidence_candidates(text: str) -> list[tuple[str, set[str], set[str]]]:
+    """Answer candidates in ``text`` as ``(sentence, own terms, heading terms)``.
+
+    Candidates are sentences and list items, split within each line, so a heading
+    or list item is never glued to the sentence after it. A heading line ("# ...")
+    is not a candidate, but its terms count for every sentence under it: a heading
+    says what its section is about, so its words should not favour whichever one
+    sentence happens to repeat them. Text indexed before chunks kept line breaks
+    is one line, heading glued to the sentences after it; such a line has
+    sentence breaks, so it is split as before rather than skipped.
+    """
+    candidates: list[tuple[str, set[str], set[str]]] = []
+    heading_terms: set[str] = set()
+    for line in clean_evidence_text(text).split("\n"):
+        parts = LIST_ITEM_OR_SENTENCE_BREAK.split(line)
+        if len(parts) == 1 and HEADING_LINE.match(line):
+            heading_terms = selection_terms(line)
+            continue
+        for part in parts:
+            part = part.strip()
+            if len(part) >= 35:
+                candidates.append((part, selection_terms(part), heading_terms))
+    return candidates
 
 
 def split_evidence_sentences(text: str) -> list[str]:
-    normalized = clean_evidence_text(text)
-    parts = LIST_ITEM_OR_SENTENCE_BREAK.split(normalized)
-    sentences = [part.strip() for part in parts if len(part.strip()) >= 35]
+    """The answer candidates of ``text`` (see ``evidence_candidates``); the whole
+    text when none is long enough."""
+    sentences = [sentence for sentence, _own_terms, _heading_terms in evidence_candidates(text)]
     if sentences:
         return sentences
-    if not normalized:
-        return []
-    return [normalized]
+    normalized = " ".join(clean_evidence_text(text).split())
+    return [normalized] if normalized else []
 
 
 def clean_evidence_text(text: str) -> str:
-    normalized = " ".join(text.split())
-    if " Abstract " in normalized[:1400]:
-        normalized = "Abstract: " + normalized.split(" Abstract ", 1)[1]
+    """Evidence text without PDF title-page noise, whitespace normalized as at
+    ingestion (paragraph, heading and list line breaks kept)."""
+    normalized = normalize_text(text)
+    abstract = ABSTRACT_MARKER.search(normalized[:1400])
+    if abstract:
+        normalized = "Abstract: " + normalized[abstract.end() :]
 
     cleanup_patterns = [
         r"^KSII TRANSACTIONS ON INTERNET AND INFORMATION SYSTEMS VOL\.\s*15,\s*NO\.\s*2,\s*(?:Feb\.|February)\s*2021\s*\d+\s*",

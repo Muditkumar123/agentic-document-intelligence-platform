@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from adip.ingestion.chunking import split_text
+from adip.ingestion.chunking import normalize_text, split_text
 from adip.ingestion.pipeline import ingest_path
 
 
@@ -14,6 +14,45 @@ def test_split_text_uses_overlap():
     assert [chunk[1:] for chunk in chunks] == [(0, 5), (3, 8), (6, 11), (9, 12)]
     assert chunks[0][0] == "word0 word1 word2 word3 word4"
     assert chunks[1][0].startswith("word3 word4")
+
+
+def test_normalize_text_keeps_structural_line_breaks_and_joins_wrapped_lines():
+    text = (
+        "# NIST CSF 2.0 - Core Functions\n"
+        "The Framework organizes outcomes\n"
+        "   into six   core Functions:\n"
+        "\n"
+        "- Respond: take action regarding a detected\n"
+        "  cybersecurity incident.\n"
+        "- Recover: restore assets.\n"
+        "| Class | Range |\n"
+        "| Client Error | 4xx |\n"
+    )
+
+    assert normalize_text(text) == (
+        "# NIST CSF 2.0 - Core Functions\n"
+        "The Framework organizes outcomes into six core Functions:\n\n"
+        "- Respond: take action regarding a detected cybersecurity incident.\n"
+        "- Recover: restore assets.\n"
+        "| Class | Range |\n"
+        "| Client Error | 4xx |"
+    )
+
+
+def test_split_text_keeps_line_breaks_inside_unchanged_word_windows():
+    text = "# Title\n\nFirst para wraps\nhere.\n\n- item one\n- item two"
+
+    chunks = list(split_text(text, chunk_size=4, chunk_overlap=1))
+
+    assert [chunk[1:] for chunk in chunks] == [(0, 4), (3, 7), (6, 10), (9, 12)]
+    assert chunks[0][0] == "# Title\n\nFirst para"
+    assert chunks[1][0] == "para wraps here.\n\n-"
+    assert [" ".join(chunk[0].split()) for chunk in chunks] == [
+        "# Title First para",
+        "para wraps here. -",
+        "- item one -",
+        "- item two",
+    ]
 
 
 def test_split_text_rejects_invalid_overlap():

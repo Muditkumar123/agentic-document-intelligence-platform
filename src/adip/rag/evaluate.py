@@ -145,7 +145,7 @@ def evaluate(
         )
         query_latencies.append((time.perf_counter() - query_start) * 1000)
         expected_chunk_ids = set(row.get("expected_chunk_ids", []))
-        expected_substrings = [text.lower() for text in row.get("expected_substrings", [])]
+        expected_substrings = [" ".join(text.lower().split()) for text in row.get("expected_substrings", [])]
 
         rank = find_hit_rank(retrieved, expected_chunk_ids, expected_substrings)
         hit = rank is not None
@@ -230,7 +230,8 @@ def find_hit_rank(
 ) -> int | None:
     for rank, item in enumerate(retrieved, start=1):
         chunk_id = item.chunk["chunk_id"]
-        text = item.chunk["text"].lower()
+        # Chunk text keeps paragraph line breaks; a phrase may cross one.
+        text = " ".join(item.chunk["text"].lower().split())
         if chunk_id in expected_chunk_ids:
             return rank
         if any(expected in text for expected in expected_substrings):

@@ -1,5 +1,5 @@
 {
-  "_comment": "CI quality-gate thresholds, measured on the REAL public-document eval corpus (data/eval/raw, 19 docs across 5 categories; data/eval/golden_qa.jsonl, 47 answerable + 10 unanswerable questions). Generation eval runs with evidence-gated abstention (--abstention-threshold 0.10). Floors (min) and the refusal-rate ceiling (max) sit with margin around the measured deterministic baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 1.0 (over the answerable rows), faithfulness 0.596, grounded_rate 0.942, expected_coverage 0.826, answer_relevance 0.912, citation_coverage 0.684, refusal_rate 0.088, refusal_precision 1.0, refusal_recall 0.5. Retrieval is saturated because the corpus is lexically distinct; the discriminating gates are generation faithfulness and abstention precision/recall. Regenerate with: python -m adip.mlops.run_rag_eval --chunks data/processed/chunks.jsonl --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --abstention-threshold 0.10",
+  "_comment": "CI quality-gate thresholds, measured on the REAL public-document eval corpus (data/eval/raw, 19 docs across 5 categories; data/eval/golden_qa.jsonl, 47 answerable + 10 unanswerable questions). Generation eval runs with evidence-gated abstention (--abstention-threshold 0.10). Floors (min) and the refusal-rate ceiling (max) sit with margin around the measured deterministic baseline (TF-IDF, no faiss, no rerank, extractive writer): hit_rate@k 1.0, mrr 1.0 (over the answerable rows), faithfulness 0.583, grounded_rate 0.942, expected_coverage 0.841, answer_relevance 0.912, citation_coverage 0.684, refusal_rate 0.088, refusal_precision 1.0, refusal_recall 0.5. Retrieval is saturated because the corpus is lexically distinct; the discriminating gates are generation faithfulness and abstention precision/recall. Regenerate with: python -m adip.mlops.run_rag_eval --chunks data/processed/chunks.jsonl --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --backend tfidf --no-faiss && python -m adip.mlops.run_generation_eval --index data/processed/vector_index --golden data/eval/golden_qa.jsonl --abstention-threshold 0.10",
   "retrieval": {
     "metrics_file": "data/monitoring/rag_eval_metrics.json",
     "min": {
@@ -22,14 +22,14 @@
       "gen_eval_refusal_rate": 0.2
     }
   },
-  "_multihop_comment": "Agent retrieval loop on two-document questions (data/eval/multihop_probes.jsonl, 16 probes) over data/eval/raw + data/eval/long (173 chunks), TF-IDF, extractive writer, rule-based decomposer. Measured: single_pass full_support 0.5625; full (decompose + follow-up searches) full_support 0.75, hop_recall 0.875, gain 0.1875, answer_full_coverage 0.6875 (the extractive writer's answer contains both hops); on the 47 single-hop golden questions the full loop keeps hit_rate 1.0 at 1.09 searches per question. Regenerate with: python -m adip.mlops.run_multihop_eval --variants single_pass full",
+  "_multihop_comment": "Agent retrieval loop on two-document questions (data/eval/multihop_probes.jsonl, 16 probes) over data/eval/raw + data/eval/long (173 chunks), TF-IDF, extractive writer, rule-based decomposer. Measured: single_pass full_support 0.5625; full (decompose + follow-up searches) full_support 0.75, hop_recall 0.875, gain 0.1875, answer_full_coverage 0.8125 (the extractive writer's answer contains both hops; 0.6875 before chunks kept line breaks, so a return to that writer fails the 0.7 floor); on the 47 single-hop golden questions the full loop keeps hit_rate 1.0 at 1.09 searches per question. Regenerate with: python -m adip.mlops.run_multihop_eval --variants single_pass full",
   "multihop": {
     "metrics_file": "data/monitoring/multihop_eval_metrics.json",
     "min": {
       "multihop_full_full_support_rate": 0.65,
       "multihop_full_hop_recall": 0.8,
       "multihop_full_full_support_gain": 0.1,
-      "multihop_full_answer_full_coverage": 0.6,
+      "multihop_full_answer_full_coverage": 0.7,
       "golden_full_hit_rate": 0.95
     },
     "max": {
