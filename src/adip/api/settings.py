@@ -25,6 +25,8 @@ from adip.config.env import load_project_env
 
 ADMIN_TOKEN_ENV = "ADIP_ADMIN_TOKEN"
 MAX_UPLOAD_MB_ENV = "ADIP_MAX_UPLOAD_MB"
+RATE_LIMIT_ENV = "ADIP_RATE_LIMIT_PER_MINUTE"
+DEFAULT_RATE_LIMIT_PER_MINUTE = 60
 DEFAULT_MAX_UPLOAD_MB = 20
 # Headroom over the file size for multipart boundaries and form fields.
 MULTIPART_OVERHEAD_BYTES = 1024 * 1024
@@ -48,6 +50,8 @@ class ApiSettings:
     data_dir: Path = Path("data")
     admin_token: str | None = None
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
+    # Requests per minute per client on the endpoints that do work; 0 turns the limit off.
+    rate_limit_per_minute: int = DEFAULT_RATE_LIMIT_PER_MINUTE
 
     @property
     def raw_dir(self) -> Path:
@@ -90,4 +94,11 @@ class ApiSettings:
             raise ValueError(f"{MAX_UPLOAD_MB_ENV} must be a number, got {raw_limit!r}") from exc
         if max_upload_mb <= 0:
             raise ValueError(f"{MAX_UPLOAD_MB_ENV} must be greater than 0")
-        return cls(admin_token=token, max_upload_bytes=int(max_upload_mb * 1024 * 1024))
+        raw_rate = (environ.get(RATE_LIMIT_ENV) or "").strip()
+        if raw_rate and not raw_rate.isdigit():
+            raise ValueError(f"{RATE_LIMIT_ENV} must be a whole number, got {raw_rate!r}")
+        return cls(
+            admin_token=token,
+            max_upload_bytes=int(max_upload_mb * 1024 * 1024),
+            rate_limit_per_minute=int(raw_rate) if raw_rate else DEFAULT_RATE_LIMIT_PER_MINUTE,
+        )

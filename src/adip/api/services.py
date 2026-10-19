@@ -28,6 +28,7 @@ from adip.llmops.pipeline import build_evidence
 from adip.monitoring.drift import append_query_record, drift_report, load_baseline, read_query_log
 from adip.rag.answer import build_extractive_answer
 from adip.rag.chunks import read_chunks_jsonl
+from adip.rag.embeddings import downloads_allowed
 from adip.rag.rerank import rerank_results, resolve_candidate_k
 from adip.rag.retriever import (
     build_index,
@@ -335,7 +336,7 @@ def run_rag_query(request: RagQueryRequest, index_path: Path) -> dict[str, Any]:
         cross_encoder_model=request.cross_encoder_model,
         cross_encoder_device=request.cross_encoder_device,
         cross_encoder_batch_size=request.cross_encoder_batch_size,
-        cross_encoder_local_files_only=not request.allow_reranker_download,
+        cross_encoder_local_files_only=not downloads_allowed(),
     )
     answer = build_extractive_answer(request.question, retrieved)
     if not retrieved and request.document_filter:

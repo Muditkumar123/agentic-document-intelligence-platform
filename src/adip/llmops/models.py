@@ -319,13 +319,13 @@ class TransformersTextGenerationAdapter:
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             local_files_only=local_files_only,
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             dtype=dtype,
             local_files_only=local_files_only,
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         self.model.to(self.device)
         self.model.eval()
@@ -474,7 +474,7 @@ class OpenAICompatibleChatAdapter:
             method="POST",
         )
         try:
-            with request.urlopen(req, timeout=self.timeout_seconds) as response:
+            with NO_REDIRECT_OPENER.open(req, timeout=self.timeout_seconds) as response:
                 response_payload = json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
@@ -488,6 +488,17 @@ class OpenAICompatibleChatAdapter:
                 f"Provider request failed: {exc.reason}. Endpoint: {self.endpoint_url}."
             ) from exc
         return response_payload
+
+
+class _RefuseRedirects(request.HTTPRedirectHandler):
+    """Model endpoints may be client-supplied and are checked before the call; a redirect would
+    send the request (and its Authorization header) to an address that was never checked."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # urllib then raises HTTPError for the 3xx instead of following it
+
+
+NO_REDIRECT_OPENER = request.build_opener(_RefuseRedirects)
 
 
 def get_adapter(

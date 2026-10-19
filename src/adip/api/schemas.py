@@ -28,10 +28,12 @@ class RagQueryRequest(BaseModel):
     reranker: Literal["none", "lexical", "cross_encoder"] = "none"
     rewriter: Literal["none", "keywords"] = "none"
     rerank_weight: float = Field(default=0.25, ge=0)
-    cross_encoder_model: str = DEFAULT_CROSS_ENCODER_MODEL
+    # A fixed choice, not any Hugging Face id or local path: clients don't pick what the server loads.
+    cross_encoder_model: Literal["cross-encoder/ms-marco-MiniLM-L-6-v2", "BAAI/bge-reranker-v2-m3"] = (
+        DEFAULT_CROSS_ENCODER_MODEL
+    )
     cross_encoder_device: str | None = None
     cross_encoder_batch_size: int = Field(default=16, ge=1)
-    allow_reranker_download: bool = False
     use_cache: bool = True
 
 

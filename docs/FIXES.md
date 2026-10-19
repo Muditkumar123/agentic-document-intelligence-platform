@@ -194,6 +194,48 @@ Existing local indexes are `rag_index.pkl` files and must be rebuilt once (`pyth
 
 > The API let the client choose filesystem paths and then unpickled whatever index sat at that path. I moved every path to server-side settings, replaced pickle with a plain-array format that cannot execute code on load, and put the write endpoints behind a token that fails closed when it is missing, with regression tests that try each attack.
 
+## 6. The API would call any URL, take unlimited requests, download any model, and trust document text
+
+Status: Fixed.
+
+### Symptom
+
+Four gaps left after fix #5:
+
+- `/models/check` and `/agent/run` accepted any `endpoint_url` and made the server send a request there, with the caller's API key. A visitor could aim it at `169.254.169.254` or an internal service.
+- No endpoint had a rate limit.
+- `/rag/query` let a client set `allow_reranker_download` and name any `cross_encoder_model`, so the server could be made to download, or load from a path, a model nobody chose.
+- Retrieved chunks were pasted into LLM prompts as plain text. A document saying "ignore previous instructions" read like the rest of the prompt.
+
+### Root cause
+
+These request fields were built for a single trusted user on localhost, and the public deployment inherited them unchanged.
+
+### Fix
+
+- **SSRF:** `model_endpoint_error` (`adip/api/security.py`) requires remote clients to use `https` hosts whose addresses are all public (`ipaddress.is_global`), and to send their own API key with any endpoint they name, so the server's key is never sent to it. The model client refuses redirects, which urllib would otherwise follow with the `Authorization` header. Loopback clients are exempt for local development.
+- **Rate limits:** `RateLimiter` gives each client `ADIP_RATE_LIMIT_PER_MINUTE` requests (default 60) on the endpoints that do work, answering 429 with `Retry-After`. It's in memory and per process, documented as a shortcut, and capped at 10,000 tracked clients, least recently seen evicted first.
+- **Model downloads:** the request field is gone. The reranker is one of two fixed models, and downloads need `ADIP_ALLOW_MODEL_DOWNLOAD=1` on the server. Local models load with `trust_remote_code=False`, so a model repository can't run its own code.
+- **Prompt injection:** `qa_v2`, `brief_v2` and `verify_v2` fence each chunk in an `<evidence>` block, mark it untrusted, and neutralise evidence tags inside it and its citation, in any case or spacing (the `fence` filter in `adip/llmops/prompts.py`). The agent flags instruction-like chunks without dropping them.
+
+### Verification
+
+- Tests in `tests/test_api.py`:
+  - public, private, link-local, loopback, IPv6-private and plain-`http` endpoints for remote and loopback clients;
+  - `/models/check` and `/agent/run` refusing a metadata address before any connection;
+  - a client endpoint without the client's own API key refused for the writer and the reasoner;
+  - 429 after the budget, a sliding window, `0` disabling the limit, and the client cap evicting the least recently seen;
+  - 422 for the download flag and for a path as the reranker model;
+  - downloads off unless the server allows them.
+- Tests in `tests/test_llmops.py`: all three prompts fence evidence; an injected `</evidence>`, in any case or spacing, or a quote in a citation cannot close its block; a 302 from the model endpoint is not followed and the redirect target never sees the key; both local-model loaders pass `trust_remote_code=False`.
+- Tests in `tests/test_agent_loop.py`: an injected chunk is flagged and still used.
+
+### Known limits
+
+- DNS rebinding between the check and the connection; route model calls through an egress proxy to close it.
+- The rate limit is per process, and behind a proxy that hides client addresses it is shared by all callers.
+- Fencing and flagging reduce prompt injection; they don't eliminate it. The extractive default writer is unaffected because it sends nothing to a model.
+
 ## Related answer-quality safeguards already in place
 
 These guards were added in earlier work and are catalogued here so the hosted-answer path is documented in one place. Each has its own test.

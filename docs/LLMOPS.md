@@ -26,10 +26,10 @@ This phase adds prompt, model, generation, and quality tracking around the answe
 
 Current prompts:
 
-- `prompts/qa_v1.txt`
-- `prompts/brief_v1.txt`
+- `prompts/qa_v2.txt` (v1 kept for comparison; v2 fences evidence as untrusted data)
+- `prompts/brief_v2.txt`
 - `prompts/plan_v1.txt`
-- `prompts/verify_v1.txt`
+- `prompts/verify_v2.txt`
 
 Every LLMOps run records:
 

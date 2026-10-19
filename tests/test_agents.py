@@ -39,7 +39,7 @@ def test_agent_runs_qa_workflow_with_trace(tmp_path):
     assert result.state.status == "completed"
     assert result.state.task_type == "qa"
     assert "platform ingests documents" in result.state.final_answer
-    assert result.state.llmops["prompt"]["version"] == "qa_v1"
+    assert result.state.llmops["prompt"]["version"] == "qa_v2"
     assert result.state.llmops["model_profile"]["profile_id"] == "extractive_baseline"
     assert result.state.metrics["llm_input_token_count"] > 0
     assert len(result.state.trace) == 6
@@ -77,7 +77,7 @@ def test_agent_routes_and_writes_brief():
     assert result.state.task_type == "brief"
     assert "Research Brief" in result.state.final_answer
     assert "Domain preset: academic" in result.state.final_answer
-    assert result.state.llmops["prompt"]["version"] == "brief_v1"
+    assert result.state.llmops["prompt"]["version"] == "brief_v2"
     assert result.state.metrics["citation_count"] >= 1
 
 
@@ -128,7 +128,7 @@ def test_agent_can_run_reasoning_verifier():
     )
 
     assert result.state.status == "completed"
-    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v1"
+    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v2"
     assert result.state.reasoning_llmops["structured_output"]["structured"] is True
     assert result.state.metrics["reasoning_verifier_enabled"] is True
     assert result.state.metrics["reasoning_llm_structured_output"] == 1.0
@@ -159,7 +159,7 @@ def test_agent_can_run_reasoning_planner_and_verifier():
 
     assert result.state.status == "completed"
     assert result.state.planning_llmops["prompt"]["version"] == "plan_v1"
-    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v1"
+    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v2"
     assert result.state.metrics["reasoning_planner_enabled"] is True
     assert result.state.metrics["planning_llm_input_token_count"] > 0
 

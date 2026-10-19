@@ -84,13 +84,13 @@ class TransformersServingBackend:
         self.tokenizer = AutoTokenizer.from_pretrained(
             profile.model_name,
             local_files_only=local_files_only,
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         self.model = AutoModelForCausalLM.from_pretrained(
             profile.model_name,
             dtype=dtype,
             local_files_only=local_files_only,
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         self.model.to(self.device)
         self.model.eval()

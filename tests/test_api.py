@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 import adip.api.app as api_app
@@ -121,6 +122,7 @@ def test_api_model_check_endpoint(monkeypatch):
             )
 
     monkeypatch.setattr(api_services, "OpenAICompatibleChatAdapter", FakeAdapter)
+    fake_dns(monkeypatch, "104.18.12.1")
     client = make_client()
 
     response = client.post(
@@ -1081,3 +1083,136 @@ def test_agent_run_rejects_out_of_range_retry_budget(tmp_path):
     response = client.post("/agent/run", json={"question": "q", "max_retrieval_retries": 10})
 
     assert response.status_code == 422
+
+
+# --- Security leftovers: SSRF, rate limiting, model downloads, prompt injection --------------
+
+
+def fake_dns(monkeypatch, address):
+    import adip.api.security as security
+
+    monkeypatch.setattr(security.socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", (address, port))])
+
+
+@pytest.mark.parametrize(
+    ("url", "address", "refused"),
+    [
+        ("https://api.example.com/v1", "104.18.12.1", False),
+        ("https://metadata.internal/v1", "169.254.169.254", True),
+        ("https://intranet.example/v1", "10.0.0.5", True),
+        ("https://localhost.example/v1", "127.0.0.1", True),
+        ("https://v6.example/v1", "fd00::1", True),
+        ("http://api.example.com/v1", "104.18.12.1", True),
+    ],
+)
+def test_remote_clients_may_only_use_public_https_model_endpoints(monkeypatch, url, address, refused):
+    from adip.api.security import model_endpoint_error
+
+    fake_dns(monkeypatch, address)
+
+    assert (model_endpoint_error(url, "203.0.113.7", api_key="k") is not None) is refused
+    assert model_endpoint_error(url, "127.0.0.1") is None  # local development may use a local model server
+
+
+def test_model_check_refuses_private_endpoint_before_calling_it(monkeypatch, tmp_path):
+    def must_not_connect(*args, **kwargs):
+        raise AssertionError("the server must not contact a private address")
+
+    monkeypatch.setattr(api_services, "OpenAICompatibleChatAdapter", must_not_connect)
+    fake_dns(monkeypatch, "169.254.169.254")
+    client = make_client(make_settings(tmp_path), client=("203.0.113.7", 50000))
+
+    check = client.post(
+        "/models/check", json={"model_name": "m", "endpoint_url": "https://evil.example/v1", "api_key": "k"}
+    )
+    agent = client.post(
+        "/agent/run",
+        json={"question": "q", "reasoning_endpoint_url": "https://evil.example/v1", "reasoning_api_key": "k"},
+    )
+
+    assert check.status_code == 400 and "public internet host" in check.json()["detail"]
+    assert agent.status_code == 400 and "public internet host" in agent.json()["detail"]
+
+
+def test_client_endpoints_never_receive_the_servers_api_key(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        api_services, "run_agent_from_index_path", lambda **kwargs: pytest.fail("must refuse before running")
+    )
+    fake_dns(monkeypatch, "104.18.12.1")  # a public host: only the missing key is wrong
+    client = make_client(make_settings(tmp_path), client=("203.0.113.7", 50000))
+    endpoint = "https://attacker.example/v1"
+
+    writer = client.post("/agent/run", json={"question": "q", "llm_provider": "openai_compatible", "endpoint_url": endpoint})
+    reasoner = client.post("/agent/run", json={"question": "q", "reasoning_endpoint_url": endpoint})
+
+    for response in (writer, reasoner):
+        assert response.status_code == 400 and "own api_key" in response.json()["detail"]
+    # The reasoning model uses the writer's key when it has none of its own, so that is enough.
+    from adip.api.security import model_endpoint_error
+
+    assert model_endpoint_error(endpoint, "203.0.113.7", api_key="client-key") is None
+
+
+def test_work_endpoints_are_rate_limited_per_client(tmp_path):
+    settings = make_settings(tmp_path, rate_limit_per_minute=2)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
+    query = {"question": "What does the platform preserve?", "top_k": 1}
+
+    statuses = [client.post("/rag/query", json=query).status_code for _ in range(3)]
+    limited = client.post("/rag/query", json=query)
+
+    assert statuses == [200, 200, 429]
+    assert int(limited.headers["retry-after"]) >= 1
+    assert client.get("/health").status_code == 200  # monitoring and the dashboard stay unlimited
+    assert make_client(settings).post("/rag/query", json=query).status_code == 200  # a fresh app, fresh budget
+
+
+def test_rate_limiter_window_slides_and_zero_disables():
+    from adip.api.security import RateLimiter
+
+    limiter = RateLimiter(per_minute=1)
+    assert limiter.retry_after("a", now=0.0) is None
+    assert limiter.retry_after("a", now=30.0) == 31
+    assert limiter.retry_after("b", now=30.0) is None
+    assert limiter.retry_after("a", now=60.0) is None
+    assert RateLimiter(per_minute=0).retry_after("a") is None
+
+
+def test_rate_limiter_forgets_the_least_recently_seen_client_at_its_cap():
+    from adip.api.security import RateLimiter
+
+    limiter = RateLimiter(per_minute=1)
+    limiter.MAX_TRACKED_CLIENTS = 2
+    limiter.retry_after("a", now=0.0)
+    limiter.retry_after("b", now=1.0)
+    limiter.retry_after("a", now=2.0)  # refused, and "a" becomes the most recently seen
+    limiter.retry_after("c", now=3.0)
+
+    assert list(limiter._hits) == ["a", "c"]  # "b" was forgotten, not the client still being limited
+    assert limiter.retry_after("a", now=4.0) is not None
+    for n in range(50):  # a flood of new addresses within one window
+        limiter.retry_after(f"spoof-{n}", now=5.0)
+    assert len(limiter._hits) == 2
+
+
+def test_clients_cannot_make_the_server_download_or_load_arbitrary_models(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
+
+    flag = client.post("/rag/query", json={"question": "q", "allow_reranker_download": True})
+    model = client.post("/rag/query", json={"question": "q", "cross_encoder_model": "/etc/some-model"})
+
+    assert flag.status_code == 422
+    assert model.status_code == 422
+    captured = {}
+    monkeypatch.setattr(
+        api_services,
+        "rerank_results",
+        lambda *args, **kwargs: captured.update(kwargs) or args[1][: kwargs["top_k"]],
+    )
+    monkeypatch.delenv("ADIP_ALLOW_MODEL_DOWNLOAD", raising=False)
+    client.post("/rag/query", json={"question": "What does the platform preserve?", "reranker": "cross_encoder"})
+    assert captured["cross_encoder_local_files_only"] is True
+

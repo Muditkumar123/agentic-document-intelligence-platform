@@ -56,6 +56,8 @@ Point it at `infra/docker/Dockerfile`, expose the port the platform provides via
 - `PORT` — port to bind (default `8010`).
 - `ADIP_ADMIN_TOKEN` — bearer token for the write endpoints (upload, delete, rebuild). Without it those endpoints refuse every request that doesn't come from loopback, which inside a container means every request. See the security model in [API.md](API.md#security-model).
 - `ADIP_MAX_UPLOAD_MB` — largest accepted document upload (default `20`).
+- `ADIP_RATE_LIMIT_PER_MINUTE` — requests per client per minute on the query, agent, model-check and write endpoints (default `60`, `0` turns it off). Render's proxy hides client addresses, so there it is one shared budget.
+- `ADIP_ALLOW_MODEL_DOWNLOAD` — set to `1` to let the server fetch embedding or reranker models it doesn't have cached. Off by default.
 - Hosted-LLM writers (Gemini/DeepSeek/Groq) are optional and **session-only**: API keys are supplied per request from the dashboard and never written to disk or baked into the image. The default extractive writer needs no keys.
 
 ## Persistence (optional)

@@ -9,6 +9,7 @@ from typing import Any
 
 from adip.agents.models import AgentState
 from adip.llmops.pipeline import generate_grounded_response
+from adip.llmops.prompts import looks_like_prompt_injection
 from adip.rag.coverage import (
     FOLLOW_UP_ACCEPT_COVERAGE,
     assess_coverage,
@@ -289,6 +290,13 @@ def verify_evidence(state: AgentState, index: RagIndex) -> AgentState:
     state.status = "verified"
     state.metrics["unique_document_count"] = len(unique_documents)
     state.metrics["low_score_count"] = low_score_count
+    flagged = [item["citation"] for item in state.retrieved if looks_like_prompt_injection(item["chunk"]["text"])]
+    state.metrics["prompt_injection_flag_count"] = len(flagged)
+    if flagged:
+        notes.append(
+            f"{len(flagged)} evidence chunk(s) contain instruction-like text (possible prompt injection); "
+            f"the writer prompt treats evidence as data only: {', '.join(flagged[:3])}."
+        )
     schedule_follow_up_searches(state, index)
     state.metrics["retrieval_retry_count"] = len(state.retrieval_retries)
     state.metrics["reasoning_verifier_enabled"] = bool(

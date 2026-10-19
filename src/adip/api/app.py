@@ -13,7 +13,7 @@ from adip.api.schemas import (
     RagQueryRequest,
     RebuildIndexRequest,
 )
-from adip.api.security import RequestSizeLimitMiddleware, write_access_error
+from adip.api.security import RateLimiter, RequestSizeLimitMiddleware, model_endpoint_error, write_access_error
 from adip.api.services import (
     check_model_connection,
     delete_raw_document,
@@ -86,7 +86,26 @@ def create_app(settings: ApiSettings | None = None):
             headers = {"WWW-Authenticate": "Bearer"} if status_code == 401 else None
             raise HTTPException(status_code=status_code, detail=detail, headers=headers)
 
-    write_guard = [Depends(require_write_access)]
+    limiter = RateLimiter(settings.rate_limit_per_minute)
+
+    def rate_limited(request: Request) -> None:
+        retry_after = limiter.retry_after(request.client.host if request.client else "unknown")
+        if retry_after is not None:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many requests: limit is {settings.rate_limit_per_minute} per minute.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+    def refuse_unsafe_endpoints(request: Request, *endpoints: tuple[str | None, str | None]) -> None:
+        client_host = request.client.host if request.client else None
+        for url, api_key in endpoints:
+            error = model_endpoint_error(url, client_host, api_key)
+            if error is not None:
+                raise HTTPException(status_code=400, detail=error)
+
+    work_guard = [Depends(rate_limited)]
+    write_guard = [Depends(rate_limited), Depends(require_write_access)]
 
     @app.get("/", include_in_schema=False)
     def dashboard():
@@ -182,12 +201,18 @@ def create_app(settings: ApiSettings | None = None):
     def mlops_run_detail(run_id: str) -> dict[str, Any]:
         return call_service(lambda: get_mlops_run(run_id, run_dir=settings.mlops_run_dir), HTTPException)
 
-    @app.post("/rag/query")
+    @app.post("/rag/query", dependencies=work_guard)
     def rag_query(request: RagQueryRequest) -> dict[str, Any]:
         return call_service(lambda: run_rag_query(request, settings.index_path(request.backend)), HTTPException)
 
-    @app.post("/agent/run")
-    def agent_run(request: AgentRunRequest) -> dict[str, Any]:
+    @app.post("/agent/run", dependencies=work_guard)
+    def agent_run(request: AgentRunRequest, http_request: Request) -> dict[str, Any]:
+        refuse_unsafe_endpoints(
+            http_request,
+            (request.endpoint_url, request.api_key),
+            # the reasoning model falls back to the writer's key, as in adip.agents.nodes
+            (request.reasoning_endpoint_url, request.reasoning_api_key or request.api_key),
+        )
         return call_service(
             lambda: run_agent_workflow(
                 request,
@@ -197,8 +222,9 @@ def create_app(settings: ApiSettings | None = None):
             HTTPException,
         )
 
-    @app.post("/models/check")
-    def model_check(request: ModelCheckRequest) -> dict[str, Any]:
+    @app.post("/models/check", dependencies=work_guard)
+    def model_check(request: ModelCheckRequest, http_request: Request) -> dict[str, Any]:
+        refuse_unsafe_endpoints(http_request, (request.endpoint_url, request.api_key))
         return call_service(lambda: check_model_connection(request), HTTPException)
 
     @app.post("/pipeline/rebuild-index", dependencies=write_guard)

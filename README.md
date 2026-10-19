@@ -91,7 +91,7 @@ python -m adip.api --host 127.0.0.1 --port 8010
 ```
 
 The dashboard is at `http://127.0.0.1:8010/` and the OpenAPI docs at `/docs`.
-Run the test suite with `pytest` (275 tests, hermetic, no GPU needed).
+Run the test suite with `pytest` (288 tests, hermetic, no GPU needed).
 
 ## API
 

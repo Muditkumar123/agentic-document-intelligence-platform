@@ -174,7 +174,6 @@ function buildRagPayload() {
     top_k: Number($("ragTopK").value),
     candidate_k: Number($("ragCandidateK").value),
     reranker: $("ragReranker").value,
-    allow_reranker_download: $("allowRerankerDownload").checked,
   };
 }
 
