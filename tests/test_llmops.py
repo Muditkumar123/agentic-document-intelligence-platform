@@ -450,6 +450,20 @@ def test_rare_evidence_terms_outweigh_common_ones():
     assert focus_sentence(text, question, term_weights=weights) == "Records are kept for no longer than necessary."
 
 
+def test_equal_weight_totals_tie_so_length_decides():
+    # Ten weights of 0.1 total exactly 1.0, but a plain sum gives 0.9999999999999999. With real
+    # IDF weights such rounding depended on set iteration order (the process's hash seed), so the
+    # EU AI Act golden answer changed between otherwise identical eval runs.
+    text = (
+        "Alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india and juliet are the first ten "
+        "code words of the spelling alphabet. Kilo comes eleventh in that same list."
+    )
+    question = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo"
+    weights = {term: 0.1 for term in question_part_terms(question)[0]} | {"kilo": 1.0}
+
+    assert focus_sentence(text, question, term_weights=weights).startswith("Alpha, bravo")
+
+
 def test_focus_sentence_prefers_answering_one_question_part_over_grazing_both():
     text = (
         "Zero trust deployments often place OAuth tokens behind a gateway. "

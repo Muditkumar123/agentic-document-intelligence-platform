@@ -899,7 +899,10 @@ def evidence_focus_sentence(
     from the best single question part (each term weighs 1 without
     ``term_weights``), so a sentence that answers one part beats one that grazes
     both; and a displayed length close to 180 characters. Remaining ties go to
-    the earliest sentence.
+    the earliest sentence. The weighted sums use ``math.fsum``: a plain ``sum``
+    over a set follows its iteration order, which changes with each process's
+    string-hash seed, so equal totals could differ in the last bit and skip the
+    length tie-break in some runs but not others.
     """
     sentences = split_evidence_sentences(str(item["text"]))
     if not sentences:
@@ -909,7 +912,7 @@ def evidence_focus_sentence(
     def rank(sentence: str) -> tuple[bool, bool, float, int]:
         lowered = sentence.lower()
         terms = selection_terms(sentence)
-        relevance = max(sum(weights.get(term, 1.0) for term in terms & part) for part in query_parts)
+        relevance = max(math.fsum(weights.get(term, 1.0) for term in terms & part) for part in query_parts)
         contribution = prefer_contributions and any(phrase in lowered for phrase in CONTRIBUTION_PHRASES)
         length_fit = -abs(min(len(sentence), max_chars) - 180)
         return (not lowered.startswith(NOISY_SENTENCE_PREFIXES), contribution, relevance, length_fit)

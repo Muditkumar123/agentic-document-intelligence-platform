@@ -137,6 +137,8 @@ Every golden question is answered by one passage of one document, and the eval d
 
 "Answer both" is measured with the extractive writer's sentence choice described in finding 4. Before that change it was 0.438 (single_pass) and 0.500 (full) on both backends.
 
+**Run-to-run.** Repeated runs give identical reports, so a single before/after run is enough on either backend. Until the writer and coverage sums switched to `math.fsum`, one hybrid golden answer depended on the process's string-hash seed. The writer summed term weights over a Python set, whose order changes with `PYTHONHASHSEED`. For "What obligations does the EU AI Act impose on high-risk AI systems?", two sentences have equal totals, but under some seeds they differed in the last bit, so the length tie-break never ran and the heading sentence was shown instead of the one naming "risk-management systems" and "human oversight". On 1 of 16 seeds, hybrid golden expected coverage read 0.772 instead of 0.783, in every variant. Now all 16 seeds give the same TF-IDF and hybrid reports, with the values above, and the same CI generation report. Retrieval was already deterministic. Hybrid scores are bit-identical across 1 to 64 BLAS threads, and the exact fused-score tie at ranks 3 and 4 on that question (BM25 rank 7 + dense rank 3 against 3 + 7) always keeps chunk order.
+
 **With a local LLM** (Qwen/Qwen3-8B served by `adip.serving` on one A100, thinking off; TF-IDF; offline, not in CI):
 
 | Variant | Decomposer | Writer | Hop recall | Both hops | Answer hop coverage | Answer both | Searches | Latency |

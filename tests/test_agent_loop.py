@@ -13,7 +13,14 @@ from adip.agents.multihop_eval import (
     score_multihop_case,
 )
 from adip.agents.runner import run_agent
-from adip.rag.coverage import assess_coverage, build_term_statistics, content_terms, entity_terms
+from adip.rag.coverage import (
+    FOLLOW_UP_ACCEPT_COVERAGE,
+    assess_coverage,
+    build_term_statistics,
+    content_terms,
+    entity_terms,
+    weighted_coverage,
+)
 from adip.rag.decompose import parse_sub_questions, split_question
 from adip.rag.retriever import build_index
 
@@ -111,6 +118,22 @@ def test_assess_coverage_flags_a_missing_named_entity():
     assert missing.coverage < 0.8
     assert missing.follow_up_terms[0] == "dns"
     assert {"dns", "label"} <= set(missing.follow_up_terms)
+
+
+def test_weighted_coverage_of_half_the_equally_weighted_terms_is_exactly_half():
+    # Every term is in one chunk, so all six weigh the same; a plain sum makes this
+    # 0.49999999999999994 and a follow-up search finding half the missing terms is dropped.
+    chunks = [
+        "Kerberos tickets and nonces.",
+        "Ciphers rotate keys daily.",
+        "Gateways log every request.",
+        "Auditors review quarterly reports.",
+    ]
+    stats = build_term_statistics(chunks)
+    question_terms = content_terms("Which Kerberos tickets and nonces do ciphers rotate with keys?")
+
+    assert len(question_terms) == 6
+    assert weighted_coverage(question_terms, content_terms(chunks[0]), stats) == FOLLOW_UP_ACCEPT_COVERAGE == 0.5
 
 
 # --- the loop ----------------------------------------------------------------------

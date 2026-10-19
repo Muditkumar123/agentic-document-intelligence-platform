@@ -137,10 +137,12 @@ def term_statistics_for(index: Any) -> TermStatistics:
 
 
 def weighted_coverage(query_terms: set[str], covered_terms: set[str], stats: TermStatistics) -> float:
-    total = sum(stats.idf(term) for term in query_terms)
+    # fsum, because a plain sum over a set depends on its iteration order, which
+    # changes with each process's string-hash seed: equal coverages must compare equal.
+    total = math.fsum(stats.idf(term) for term in query_terms)
     if total <= 0:
         return 1.0
-    return sum(stats.idf(term) for term in query_terms & covered_terms) / total
+    return math.fsum(stats.idf(term) for term in query_terms & covered_terms) / total
 
 
 @dataclass(frozen=True)
