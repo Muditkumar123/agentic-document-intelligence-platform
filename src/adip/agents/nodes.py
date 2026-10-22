@@ -21,6 +21,7 @@ from adip.rag.coverage import (
 from adip.rag.decompose import parse_sub_questions, split_question
 from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL, rerank_results, resolve_candidate_k
 from adip.rag.retriever import RagIndex, RetrievedChunk
+from adip.tracing import set_attributes, span
 
 SUPPORTED_DECOMPOSERS = {"none", "rules", "llm"}
 
@@ -234,17 +235,33 @@ def search_stream(state: AgentState, index: RagIndex, query: str) -> list[Retrie
     Reranking per stream, not once for the whole question, is what lets a sub-question
     pick the right section of a long document rather than its most keyword-dense one.
     """
-    if state.reranker == "none":
-        return index.search(query, top_k=state.top_k, document_filter=state.document_filter)
-    candidate_k = resolve_candidate_k(state.top_k, state.rerank_candidate_k, state.reranker)
-    candidates = index.search(query, top_k=candidate_k, document_filter=state.document_filter)
-    return rerank_results(
-        query,
-        candidates,
-        reranker=state.reranker,
-        top_k=state.top_k,
-        cross_encoder_model=state.rerank_model or DEFAULT_CROSS_ENCODER_MODEL,
-    )
+    attributes = {
+        "adip.retrieval.backend": index.backend,
+        "adip.retrieval.top_k": state.top_k,
+        "adip.retrieval.reranker": state.reranker,
+        "adip.retrieval.document_filtered": state.document_filter is not None,
+    }
+    with span("retrieval.search", attributes) as search_span:
+        if state.reranker == "none":
+            results = index.search(query, top_k=state.top_k, document_filter=state.document_filter)
+        else:
+            candidate_k = resolve_candidate_k(state.top_k, state.rerank_candidate_k, state.reranker)
+            candidates = index.search(query, top_k=candidate_k, document_filter=state.document_filter)
+            results = rerank_results(
+                query,
+                candidates,
+                reranker=state.reranker,
+                top_k=state.top_k,
+                cross_encoder_model=state.rerank_model or DEFAULT_CROSS_ENCODER_MODEL,
+            )
+        set_attributes(
+            search_span,
+            {
+                "adip.retrieval.result_count": len(results),
+                "adip.retrieval.top_score": float(results[0].score) if results else 0.0,
+            },
+        )
+        return results
 
 
 def assemble_evidence(state: AgentState) -> list[dict[str, Any]]:
