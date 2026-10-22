@@ -4,6 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agentic Document Intelligence</title>
+    <meta name="theme-color" content="#0a0b0a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
@@ -13,24 +20,34 @@
       defer
       src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
     ></script>
-    <link rel="stylesheet" href="/static/dashboard.css?v=20261019-sec2" />
+    <link rel="stylesheet" href="/static/dashboard.css?v=20261022-mc" />
   </head>
   <body>
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Document Intelligence</p>
-        <h1>Agentic Document Intelligence</h1>
-        <p class="tagline">
-          Ask questions about real documents — every answer cited, every metric measured,
-          every regression blocked in CI.
-        </p>
-        <div class="hero-badges" id="heroBadges">
-          <span class="hero-badge">LangGraph agent</span>
-          <span class="hero-badge">Hybrid BM25 + dense retrieval</span>
-          <span class="hero-badge">RAGAS + LLM-judge evals</span>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">AD<span>IP</span></span>
+        <div>
+          <p class="eyebrow">Mission control · document intelligence</p>
+          <h1>Agentic Document Intelligence</h1>
+          <p class="tagline">
+            Ask questions about real documents and watch the agent plan, search, check its
+            evidence and retry. Every answer cited, every metric measured, every regression
+            blocked in CI.
+          </p>
+          <div class="hero-badges" id="heroBadges">
+            <span class="hero-badge">LangGraph agent loop</span>
+            <span class="hero-badge">Hybrid BM25 + dense retrieval</span>
+            <span class="hero-badge">RAGAS + LLM-judge evals</span>
+          </div>
         </div>
       </div>
-      <div class="status" id="serviceStatus">Checking</div>
+      <div class="topbar-actions">
+        <button class="palette-trigger" id="openPalette" type="button" aria-haspopup="dialog">
+          <span>Commands</span>
+          <kbd id="paletteShortcut">Ctrl K</kbd>
+        </button>
+        <div class="status" id="serviceStatus">Checking</div>
+      </div>
     </header>
 
     <div class="coldstart-banner hidden" id="coldStartBanner" role="status">
@@ -40,7 +57,9 @@
     </div>
 
     <main>
+      <div class="readouts">
       <section class="metric-band" aria-label="Retrieval benchmark">
+        <p class="band-label">Retrieval benchmark</p>
         <div class="metric">
           <span>Plain Backend</span>
           <strong id="bestBackend">-</strong>
@@ -60,6 +79,7 @@
       </section>
 
       <section class="metric-band" aria-label="Answer quality evaluation">
+        <p class="band-label">Answer quality · CI gated</p>
         <div class="metric">
           <span>Faithfulness</span>
           <strong id="genFaithfulness">-</strong>
@@ -77,15 +97,16 @@
           <strong id="genCitationCoverage">-</strong>
         </div>
       </section>
+      </div>
 
       <section class="workspace">
         <aside class="control-panel">
           <div class="mode-tabs" role="tablist" aria-label="Workflow mode">
-            <button class="mode-tab active" type="button" data-mode="rag">Query</button>
-            <button class="mode-tab" type="button" data-mode="agent">Agent</button>
-            <button class="mode-tab" type="button" data-mode="eval">Evaluation</button>
-            <button class="mode-tab" type="button" data-mode="index">Documents</button>
-            <button class="mode-tab" type="button" data-mode="history">History</button>
+            <button class="mode-tab active" type="button" role="tab" aria-selected="true" data-mode="rag">Query</button>
+            <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="agent">Agent</button>
+            <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="eval">Evaluation</button>
+            <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="index">Documents</button>
+            <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="history">History</button>
           </div>
 
           <form class="workflow-form" id="ragForm" data-mode-panel="rag">
@@ -396,7 +417,7 @@
         <section class="result-panel" aria-live="polite">
           <div class="result-header">
             <div>
-              <p class="eyebrow">Run Output</p>
+              <p class="eyebrow">Run output</p>
               <h2 id="resultTitle">Ready</h2>
             </div>
             <div class="result-actions">
@@ -407,28 +428,32 @@
             </div>
           </div>
 
-          <div id="standardResult">
-            <div class="answer-block">
+          <div id="standardResult" class="bento">
+            <div class="tile tile-answer answer-block">
               <h3>Answer</h3>
               <div id="answerWarning" class="answer-warning" role="status" hidden></div>
               <div id="answerText" class="answer-body">Run a workflow to populate the answer.</div>
             </div>
 
-            <section class="quality-block" aria-label="Answer quality">
+            <section class="tile tile-replay" aria-label="Agent run replay">
+              <div class="tile-head">
+                <h3>Agent run replay</h3>
+                <button class="secondary-action compact-action hidden" id="replayTrace" type="button">
+                  Replay
+                </button>
+              </div>
+              <div class="trace-list" id="traceList"></div>
+            </section>
+
+            <section class="tile tile-quality quality-block" aria-label="Answer quality">
               <h3>Quality</h3>
               <div class="quality-grid" id="qualityGrid"></div>
             </section>
 
-            <div class="two-column">
-              <div>
-                <h3>Citations</h3>
-                <div class="citation-list" id="citationList"></div>
-              </div>
-              <div>
-                <h3>Trace</h3>
-                <div class="trace-list" id="traceList"></div>
-              </div>
-            </div>
+            <section class="tile tile-citations" aria-label="Citations">
+              <h3>Citations</h3>
+              <div class="citation-list" id="citationList"></div>
+            </section>
           </div>
 
           <div id="compareView" class="hidden" aria-label="Backend comparison"></div>
@@ -442,6 +467,25 @@
       </section>
     </main>
 
-    <script src="/static/dashboard.js?v=20261019-sec2" defer></script>
+    <dialog class="palette" id="commandPalette" aria-label="Command palette">
+      <div class="palette-search">
+        <span class="palette-prompt" aria-hidden="true">&gt;</span>
+        <input
+          id="paletteInput"
+          type="text"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="paletteList"
+          aria-autocomplete="list"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Type a command"
+        />
+        <kbd>Esc</kbd>
+      </div>
+      <ul class="palette-list" id="paletteList" role="listbox" aria-label="Commands"></ul>
+    </dialog>
+
+    <script src="/static/dashboard.js?v=20261022-mc" defer></script>
   </body>
 </html>

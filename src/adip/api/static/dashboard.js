@@ -8,11 +8,19 @@ const state = {
   profilesById: {},
   customProfiles: {},
   indexedDocuments: [],
+  lastTrace: null,
+  paletteMatches: [],
+  paletteIndex: 0,
+  paletteReturnFocus: null,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   bindModeTabs();
   bindForms();
+  bindPalette();
+  renderQuality(null);
+  renderCitations([]);
+  renderTrace([]);
   watchColdStart();
   refreshBenchmark();
   refreshGenerationEval();
@@ -23,23 +31,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function bindModeTabs() {
   document.querySelectorAll(".mode-tab").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.activeMode = button.dataset.mode;
-      document.querySelectorAll(".mode-tab").forEach((item) => {
-        item.classList.toggle("active", item === button);
-      });
-      document.querySelectorAll("[data-mode-panel]").forEach((panel) => {
-        panel.classList.toggle("hidden", panel.dataset.modePanel !== state.activeMode);
-      });
-      if (state.activeMode === "history") {
-        loadAgentHistory();
-        loadMlopsHistory();
-      }
-      if (state.activeMode === "eval") {
-        loadEvaluation();
-      }
-    });
+    button.addEventListener("click", () => setMode(button.dataset.mode));
   });
+}
+
+function setMode(mode) {
+  state.activeMode = mode;
+  document.querySelectorAll(".mode-tab").forEach((item) => {
+    const active = item.dataset.mode === mode;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll("[data-mode-panel]").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.modePanel !== mode);
+  });
+  if (mode === "history") {
+    loadAgentHistory();
+    loadMlopsHistory();
+  }
+  if (mode === "eval") {
+    loadEvaluation();
+  }
 }
 
 function bindForms() {
@@ -80,6 +92,7 @@ function bindForms() {
   $("addCustomModel").addEventListener("click", () => addCustomModel());
   $("testCustomModel").addEventListener("click", () => testCustomModel());
   $("refreshRawDocs").addEventListener("click", () => refreshRawDocuments());
+  $("replayTrace").addEventListener("click", () => replayLastTrace());
 }
 
 // Write endpoints (upload, delete, rebuild) need the server's admin token. It is
@@ -1008,11 +1021,25 @@ function renderCitations(items) {
   });
 }
 
+const NODE_LABELS = {
+  intent_router: "Route the question",
+  planner: "Plan and split",
+  retriever: "Search the index",
+  evidence_verifier: "Check the evidence",
+  writer: "Write the answer",
+  citation_checker: "Check citations",
+};
+
+const REPLAY_STEP_MS = 380;
+let replayToken = 0;
+
 function renderTrace(events, meta) {
   const list = $("traceList");
   list.innerHTML = "";
+  state.lastTrace = events.length ? { events, meta } : null;
+  $("replayTrace").classList.toggle("hidden", !events.length);
   if (!events.length) {
-    list.appendChild(emptyState("No trace events"));
+    list.appendChild(replayIntro());
     return;
   }
 
@@ -1026,24 +1053,35 @@ function renderTrace(events, meta) {
     `;
     list.appendChild(badgeRow);
   }
-  renderRetrievalLoop(list, meta);
 
   const maxDuration = Math.max(
     1,
     ...events.map((event) => (event.duration_ms == null ? 0 : event.duration_ms))
   );
+  const runs = {};
+  const steps = document.createElement("ol");
+  steps.className = "replay-steps";
   events.forEach((event, position) => {
-    const node = document.createElement("article");
-    const failed = event.status === "failed";
-    node.className = failed ? "trace-step failed" : "trace-step";
+    const name = event.node_name || "node";
+    runs[name] = (runs[name] || 0) + 1;
+    // A second search or evidence check is the agent's retry loop at work.
+    const retry = runs[name] > 1 && (name === "retriever" || name === "evidence_verifier");
+    const node = document.createElement("li");
+    node.className = ["trace-step", event.status === "failed" ? "failed" : "", retry ? "retry" : ""]
+      .filter(Boolean)
+      .join(" ");
+    node.tabIndex = 0;
+    node.setAttribute("aria-expanded", "false");
     const width = Math.max(2, Math.round(((event.duration_ms || 0) / maxDuration) * 100));
     node.innerHTML = `
       <div class="trace-step-head">
         <span class="trace-step-index">${position + 1}</span>
-        <span class="trace-step-name">${escapeHtml(event.node_name || "node")}</span>
-        <span class="trace-step-status">${escapeHtml(event.status || "status")}</span>
+        <span class="trace-step-name">${escapeHtml(NODE_LABELS[name] || name)}</span>
+        <span class="trace-step-node">${escapeHtml(name)}</span>
+        ${event.status && event.status !== "completed" ? `<span class="trace-step-status">${escapeHtml(event.status)}</span>` : ""}
         <span class="trace-step-duration">${event.duration_ms == null ? "-" : `${formatScore(event.duration_ms)} ms`}</span>
       </div>
+      ${stepFacts(event, retry)}
       <div class="trace-step-bar"><span style="width:${width}%"></span></div>
       <div class="trace-step-details hidden">
         ${event.error ? `<p class="trace-step-error">${escapeHtml(event.error)}</p>` : ""}
@@ -1051,11 +1089,96 @@ function renderTrace(events, meta) {
         <p class="item-meta">Status after node: ${escapeHtml(stateField(event.output_summary, "status"))} | Task: ${escapeHtml(stateField(event.output_summary, "task_type"))} | Retrieval round: ${escapeHtml(stateField(event.output_summary, "retrieval_round_count"))}</p>
       </div>
     `;
-    node.addEventListener("click", () => {
-      node.querySelector(".trace-step-details").classList.toggle("hidden");
+    const toggle = () => {
+      const details = node.querySelector(".trace-step-details");
+      details.classList.toggle("hidden");
+      node.setAttribute("aria-expanded", String(!details.classList.contains("hidden")));
+    };
+    node.addEventListener("click", toggle);
+    node.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
     });
-    list.appendChild(node);
+    steps.appendChild(node);
   });
+  list.appendChild(steps);
+  renderRetrievalLoop(list, meta);
+  playReplay(steps);
+}
+
+function stepFacts(event, retry) {
+  const summary = event.output_summary || {};
+  const facts = retry ? ['<span class="trace-fact retry">retry</span>'] : [];
+  const add = (text) => facts.push(`<span class="trace-fact">${escapeHtml(text)}</span>`);
+  if (event.node_name === "planner") {
+    if (summary.sub_question_count > 1) add(`${summary.sub_question_count} sub-questions`);
+    if (summary.plan_step_count) add(`${summary.plan_step_count} plan steps`);
+  } else if (event.node_name === "retriever" || event.node_name === "evidence_verifier") {
+    if (summary.retrieved_count != null) add(`${summary.retrieved_count} chunks`);
+    if (summary.retrieval_round_count) add(`round ${summary.retrieval_round_count}`);
+  } else if (event.node_name === "writer" && summary.answer_char_count) {
+    add(`${summary.answer_char_count} chars`);
+  } else if (event.node_name === "citation_checker" && summary.citation_count != null) {
+    add(`${summary.citation_count} citations`);
+  }
+  return facts.length ? `<div class="trace-step-facts">${facts.join("")}</div>` : "";
+}
+
+// Reveal the steps one by one, in the order the agent ran them.
+function playReplay(container) {
+  const token = ++replayToken;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
+  const steps = [...container.querySelectorAll(".trace-step")];
+  steps.forEach((step) => step.classList.add("pending"));
+  steps.forEach((step, index) => {
+    setTimeout(() => {
+      if (token !== replayToken) return;
+      step.classList.remove("pending");
+      step.classList.add("running");
+    }, index * REPLAY_STEP_MS);
+    setTimeout(() => {
+      if (token !== replayToken) return;
+      step.classList.remove("running");
+    }, index * REPLAY_STEP_MS + REPLAY_STEP_MS - 60);
+  });
+}
+
+function replayLastTrace() {
+  if (state.lastTrace) {
+    renderTrace(state.lastTrace.events, state.lastTrace.meta);
+  }
+}
+
+function replayIntro() {
+  const box = document.createElement("div");
+  box.className = "replay-intro";
+  box.innerHTML = `
+    <p>Run the agent to replay each step as it happened: how it split the question, what it searched, where the evidence fell short and how it retried.</p>
+    <ol class="replay-schematic">
+      <li>Route the question<span>intent_router</span></li>
+      <li>Plan and split<span>planner</span></li>
+      <li>Search the index<span>retriever</span></li>
+      <li class="loop">Check the evidence<span>retries when a part is missing</span></li>
+      <li>Write the answer<span>writer</span></li>
+      <li>Check citations<span>citation_checker</span></li>
+    </ol>
+  `;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary-action";
+  button.innerHTML = '<span class="button-icon">A</span> Run a sample agent query';
+  button.addEventListener("click", () => runAgentFromAnywhere());
+  box.appendChild(button);
+  return box;
+}
+
+function runAgentFromAnywhere() {
+  setMode("agent");
+  $("agentForm").requestSubmit();
 }
 
 const LOOP_REASONS = {
@@ -1152,7 +1275,7 @@ function renderAnswerWarning(message) {
     return;
   }
   if (message) {
-    node.textContent = `⚠️ ${message}`;
+    node.textContent = `Warning: ${message}`;
     node.hidden = false;
   } else {
     node.textContent = "";
@@ -1738,4 +1861,143 @@ function renderAgreementPanel(generation, offline) {
       </div>
       <p class="eval-panel-note">The judge and RAGAS agree the extractive writer fabricates nothing (~0.93–0.97); the lexical proxy reads low (~0.59) because verbatim answers carry formatting tokens. Measuring that disagreement — instead of trusting any single number — is the point of this tab.</p>
     </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// Command palette (Ctrl/Cmd + K): every tab and main action from the keyboard.
+
+const PALETTE_COMMANDS = [
+  { label: "Go to Query", hint: "tab", run: () => setMode("rag") },
+  { label: "Go to Agent", hint: "tab", run: () => setMode("agent") },
+  { label: "Go to Evaluation", hint: "tab", run: () => setMode("eval") },
+  { label: "Go to Documents", hint: "tab", run: () => setMode("index") },
+  { label: "Go to History", hint: "tab", run: () => setMode("history") },
+  { label: "Ask a new question", hint: "focus", run: () => focusQuestion() },
+  {
+    label: "Run query",
+    hint: "query",
+    run: () => {
+      setMode("rag");
+      $("ragForm").requestSubmit();
+    },
+  },
+  {
+    label: "Compare all three backends",
+    hint: "query",
+    run: () => {
+      setMode("rag");
+      $("ragCompareBackends").checked = true;
+      $("ragForm").requestSubmit();
+    },
+  },
+  { label: "Run agent", hint: "agent", run: () => runAgentFromAnywhere() },
+  { label: "Replay last agent run", hint: "agent", run: () => replayLastTrace() },
+  { label: "Load agent traces and MLOps runs", hint: "history", run: () => setMode("history") },
+  { label: "Export report", hint: "markdown", run: () => exportReport() },
+  { label: "Show raw JSON", hint: "debug", run: () => showRawJson() },
+];
+
+function bindPalette() {
+  const dialog = $("commandPalette");
+  const input = $("paletteInput");
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  $("paletteShortcut").textContent = /mac|iphone|ipad/i.test(platform) ? "\u2318K" : "Ctrl K";
+  $("openPalette").addEventListener("click", () => openPalette());
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (dialog.open) {
+        dialog.close();
+      } else {
+        openPalette();
+      }
+    }
+  });
+  input.addEventListener("input", () => renderPalette(0));
+  input.addEventListener("keydown", (event) => {
+    const count = state.paletteMatches.length;
+    if (event.key === "ArrowDown" && count) {
+      event.preventDefault();
+      renderPalette((state.paletteIndex + 1) % count);
+    } else if (event.key === "ArrowUp" && count) {
+      event.preventDefault();
+      renderPalette((state.paletteIndex - 1 + count) % count);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      runPaletteCommand(state.paletteIndex);
+    }
+  });
+  // A click on the backdrop lands on the dialog element itself.
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("close", () => {
+    if (state.paletteReturnFocus && state.paletteReturnFocus.isConnected) {
+      state.paletteReturnFocus.focus();
+    }
+  });
+}
+
+function openPalette() {
+  const dialog = $("commandPalette");
+  state.paletteReturnFocus = document.activeElement;
+  $("paletteInput").value = "";
+  renderPalette(0);
+  dialog.showModal();
+  $("paletteInput").focus();
+}
+
+function renderPalette(index) {
+  const query = $("paletteInput").value.trim().toLowerCase();
+  state.paletteMatches = PALETTE_COMMANDS.filter(
+    (command) => !query || `${command.label} ${command.hint}`.toLowerCase().includes(query),
+  );
+  state.paletteIndex = Math.min(index, Math.max(0, state.paletteMatches.length - 1));
+  const list = $("paletteList");
+  list.innerHTML = "";
+  if (!state.paletteMatches.length) {
+    const empty = document.createElement("li");
+    empty.className = "palette-empty";
+    empty.textContent = "No matching command";
+    list.appendChild(empty);
+    $("paletteInput").removeAttribute("aria-activedescendant");
+    return;
+  }
+  state.paletteMatches.forEach((command, position) => {
+    const item = document.createElement("li");
+    item.className = "palette-item";
+    item.id = `palette-option-${position}`;
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(position === state.paletteIndex));
+    item.innerHTML = `<span>${escapeHtml(command.label)}</span><small>${escapeHtml(command.hint)}</small>`;
+    item.addEventListener("mousemove", () => {
+      if (state.paletteIndex !== position) renderPalette(position);
+    });
+    item.addEventListener("click", () => runPaletteCommand(position));
+    list.appendChild(item);
+  });
+  $("paletteInput").setAttribute("aria-activedescendant", `palette-option-${state.paletteIndex}`);
+  const active = $(`palette-option-${state.paletteIndex}`);
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+function runPaletteCommand(position) {
+  const command = state.paletteMatches[position];
+  if (!command) return;
+  state.paletteReturnFocus = null;
+  $("commandPalette").close();
+  command.run();
+}
+
+function focusQuestion() {
+  if (state.activeMode !== "agent") setMode("rag");
+  const field = $(state.activeMode === "agent" ? "agentQuestion" : "ragQuestion");
+  field.focus();
+  field.select();
+}
+
+function showRawJson() {
+  const block = document.querySelector(".raw-block");
+  block.open = true;
+  block.scrollIntoView({ block: "start" });
 }
