@@ -29,7 +29,8 @@ Current prompts:
 - `prompts/qa_v2.txt` (v1 kept for comparison; v2 fences evidence as untrusted data)
 - `prompts/brief_v2.txt`
 - `prompts/plan_v1.txt`
-- `prompts/verify_v2.txt`
+- `prompts/verify_v3.txt` (asks for JSON notes; v2 kept, which asked for section text)
+- `prompts/decompose_v2.txt` (asks for JSON sub-questions; v1 kept, which asked for numbered lines)
 
 Every LLMOps run records:
 
@@ -101,6 +102,8 @@ conda run -n crypto_env env PYTHONPATH=src python -m adip.agents \
 ```
 
 Optional reasoning planner runs are tracked with `planning_llm_*` metrics and `planning_llmops` metadata. Reasoning verifier runs are tracked with `reasoning_llm_*` metrics and `reasoning_llmops` metadata in the AgentOps trace.
+
+The verifier and the question decomposer ask for JSON. On an OpenAI-compatible provider, the request carries `response_format` with the task's JSON schema (`VERIFIER_NOTES_SCHEMA` in `adip/llmops/verifier.py`, `SUB_QUESTIONS_SCHEMA` in `adip/rag/decompose.py`). If the server rejects that field with a 400 or 422, the request is sent again without it. Parsing tries the JSON first and falls back to the older text parsers (the `Supported claims:` sections and numbered lines), so models and adapters that ignore the schema, including the extractive default, behave as before. `structured_output.normalization_reason` says which path was used (`json_schema`, `structured_sections_found` or `structured_sections_missing`), and `generation.raw.json_schema` says whether the provider took the schema.
 
 Verifier runs keep the raw model output in `generation.text`, then normalize the final verifier notes into `structured_output.final_text` before scoring citation coverage. This prevents reasoning-style models from being judged only on hidden-analysis prose. Verifier metrics include:
 

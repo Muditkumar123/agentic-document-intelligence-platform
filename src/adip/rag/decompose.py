@@ -12,8 +12,8 @@ Two modes behind one interface:
   "; how ..."), and carries a leading "context:" prefix onto every part. It
   never splits noun phrases ("X and Y"), so ordinary questions stay whole;
   the verifier's coverage check handles what syntax can't see.
-- ``llm`` — the planner model writes the sub-questions (prompt
-  ``decompose_v1``); see ``adip.agents.nodes.plan_task``.
+- ``llm`` — the planner model writes the sub-questions as JSON (prompt
+  ``decompose_v2``, ``SUB_QUESTIONS_SCHEMA``); see ``adip.agents.nodes.plan_task``.
 """
 
 from __future__ import annotations
@@ -22,6 +22,14 @@ import re
 
 MAX_SUB_QUESTIONS = 4
 MIN_SUB_QUESTION_WORDS = 3
+
+SUB_QUESTIONS_SCHEMA = {
+    "title": "sub_questions",
+    "type": "object",
+    "properties": {"sub_questions": {"type": "array", "items": {"type": "string"}}},
+    "required": ["sub_questions"],
+    "additionalProperties": False,
+}
 
 # Words that open a new question when they follow a conjunction.
 QUESTION_OPENERS = (

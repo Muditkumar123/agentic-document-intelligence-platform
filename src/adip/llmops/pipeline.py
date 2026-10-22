@@ -25,7 +25,11 @@ from adip.llmops.models import (
 )
 from adip.llmops.nli import EntailmentScorer
 from adip.llmops.prompts import PromptTemplate, load_prompt_template
-from adip.llmops.verifier import normalize_verifier_output
+from adip.llmops.verifier import VERIFIER_NOTES_SCHEMA, normalize_verifier_output
+from adip.rag.decompose import SUB_QUESTIONS_SCHEMA
+
+# Tasks whose output code parses; providers that support it are asked to follow the schema.
+RESPONSE_SCHEMAS = {"verify": VERIFIER_NOTES_SCHEMA, "decompose": SUB_QUESTIONS_SCHEMA}
 
 DOMAIN_FOCUS = {
     "academic": ["problem", "method", "dataset", "result", "limitation"],
@@ -175,6 +179,7 @@ def generate_grounded_response(
             domain_preset=domain_preset,
             evidence=evidence,
             max_new_tokens=resolved_max_new_tokens,
+            response_schema=RESPONSE_SCHEMAS.get(task_type),
         )
     )
     structured_output = None

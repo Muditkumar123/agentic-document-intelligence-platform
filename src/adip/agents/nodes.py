@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from adip.agents.models import AgentState
+from adip.llmops.models import extract_json_object
 from adip.llmops.pipeline import generate_grounded_response
 from adip.llmops.prompts import looks_like_prompt_injection
 from adip.rag.coverage import (
@@ -151,7 +152,10 @@ def decompose_question(state: AgentState) -> list[str]:
                     max_new_tokens=state.reasoning_max_new_tokens,
                 )
                 state.metrics.update(prefix_metrics(result.metrics(), prefix="decompose_"))
-                return parse_sub_questions(result.answer, state.question)
+                listed = (extract_json_object(result.answer) or {}).get("sub_questions")
+                # JSON when the provider honoured the schema; otherwise the numbered-lines parser.
+                text = "\n".join(str(item) for item in listed) if isinstance(listed, list) else result.answer
+                return parse_sub_questions(text, state.question)
             except Exception as exc:  # the planner model is optional: fall back, never fail the run
                 state.planning_notes.append(f"LLM decomposition failed ({exc}); used rule-based splitting.")
                 state.metrics["decompose_llm_error"] = str(exc)

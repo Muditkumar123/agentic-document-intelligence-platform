@@ -5,7 +5,23 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from adip.llmops.models import extract_json_object
+
 SECTION_MARKERS = ("Supported claims:", "Missing evidence:", "Verifier decision:")
+
+# What the verifier model is asked to return (prompt verify_v3). Every field is required,
+# as OpenAI-style strict structured output demands.
+VERIFIER_NOTES_SCHEMA: dict[str, Any] = {
+    "title": "verifier_notes",
+    "type": "object",
+    "properties": {
+        "supported_claims": {"type": "array", "items": {"type": "string"}},
+        "missing_evidence": {"type": "array", "items": {"type": "string"}},
+        "decision": {"type": "string"},
+    },
+    "required": ["supported_claims", "missing_evidence", "decision"],
+    "additionalProperties": False,
+}
 
 
 @dataclass(frozen=True)
@@ -22,6 +38,15 @@ class VerifierOutput:
 def normalize_verifier_output(raw_text: str, evidence: list[dict[str, Any]]) -> VerifierOutput:
     """Extract final verifier notes from models that may emit reasoning first."""
     cleaned = raw_text.strip()
+    json_text = verifier_notes_from_json(cleaned)
+    if json_text:
+        return VerifierOutput(
+            raw_text=cleaned,
+            final_text=json_text,
+            structured=True,
+            normalization_reason="json_schema",
+        )
+
     structured_text = extract_structured_sections(cleaned)
     if structured_text:
         return VerifierOutput(
@@ -37,6 +62,25 @@ def normalize_verifier_output(raw_text: str, evidence: list[dict[str, Any]]) -> 
         final_text=final_text,
         structured=False,
         normalization_reason="structured_sections_missing",
+    )
+
+
+def verifier_notes_from_json(text: str) -> str | None:
+    """JSON verifier notes (``VERIFIER_NOTES_SCHEMA``) rendered as the three usual sections, or ``None``."""
+    payload = extract_json_object(text)
+    if payload is None:
+        return None
+    claims, missing, decision = (payload.get(key) for key in VERIFIER_NOTES_SCHEMA["required"])
+    if not (isinstance(claims, list) and isinstance(missing, list) and isinstance(decision, str) and decision.strip()):
+        return None
+
+    def bullets(items: list[Any]) -> str:
+        return "\n".join(f"- {str(item).strip()}" for item in items if str(item).strip()) or "- None."
+
+    return (
+        f"Supported claims:\n{bullets(claims)}\n\n"
+        f"Missing evidence:\n{bullets(missing)}\n\n"
+        f"Verifier decision:\n- {decision.strip()}"
     )
 
 

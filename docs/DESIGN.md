@@ -157,7 +157,7 @@ Citation Checker
 Final Response
 ```
 
-**Decomposition.** The planner splits coordinated questions ("..., and which ...", "? Also, ...") into sub-questions. Rules are syntax-only and never split noun phrases ("X and Y"), so ordinary questions stay whole (2 of 47 golden questions split, and both really are two questions). With `--decomposer llm` the planner model writes the sub-questions from the versioned `decompose_v1` prompt, falling back to the rules if it fails. When a question is split, the whole question is still searched first, so decomposition can only add evidence.
+**Decomposition.** The planner splits coordinated questions ("..., and which ...", "? Also, ...") into sub-questions. Rules are syntax-only and never split noun phrases ("X and Y"), so ordinary questions stay whole (2 of 47 golden questions split, and both really are two questions). With `--decomposer llm` the planner model writes the sub-questions from the versioned `decompose_v2` prompt, as JSON when the provider supports a response schema,, falling back to the rules if it fails. When a question is split, the whole question is still searched first, so decomposition can only add evidence.
 
 **Evidence streams.** Every search is a stream. The evidence list interleaves the accepted streams round-robin (each stream's best result first), dedupes, and caps at `top_k`, so the writer's context stays the same size however many searches ran. Each evidence item records the query that found it, and the extractive writer picks that item's sentence by that query. A question that is never split or retried gets exactly the evidence a plain search returns.
 

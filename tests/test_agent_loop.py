@@ -297,17 +297,25 @@ def test_follow_up_that_finds_nothing_relevant_is_discarded():
     assert all(item["retrieval_reason"] != "follow_up" for item in state.retrieved)
 
 
-def test_llm_decomposer_uses_model_sub_questions_and_falls_back_on_failure(monkeypatch):
+@pytest.mark.parametrize(
+    "answer",
+    [
+        '```json\n{"sub_questions": ["Who issues OAuth access tokens?", "How long can a DNS label be?"]}\n```',
+        "1. Who issues OAuth access tokens?\n2. How long can a DNS label be?",  # a provider without JSON output
+    ],
+)
+def test_llm_decomposer_uses_model_sub_questions_and_falls_back_on_failure(monkeypatch, answer):
     import adip.agents.nodes as nodes_module
 
     index = build_index(MIXED_CHUNKS)
     real_generate = nodes_module.generate_grounded_response
 
     class FakeResult:
-        answer = "1. Who issues OAuth access tokens?\n2. How long can a DNS label be?"
 
         def metrics(self):
             return {"llm_latency_ms": 1.0}
+
+    FakeResult.answer = answer
 
     def fake_generate(**kwargs):
         if kwargs["task_type"] == "decompose":

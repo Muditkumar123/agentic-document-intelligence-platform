@@ -16,10 +16,10 @@ PROMPT_REGISTRY = {
     "qa": "qa_v2.txt",
     "brief": "brief_v2.txt",
     "plan": "plan_v1.txt",
-    "verify": "verify_v2.txt",
+    "verify": "verify_v3.txt",
     "judge": "judge_v1.txt",
     "rewrite": "rewrite_v1.txt",
-    "decompose": "decompose_v1.txt",
+    "decompose": "decompose_v2.txt",
 }
 
 

@@ -128,6 +128,8 @@ class GenerationRequest:
     domain_preset: str
     evidence: list[dict[str, Any]]
     max_new_tokens: int = 512
+    # JSON schema the output should follow; adapters that cannot enforce one ignore it.
+    response_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -399,7 +401,20 @@ class OpenAICompatibleChatAdapter:
             },
             {"role": "user", "content": request_payload.prompt},
         ]
-        response_payload = self._post_chat(messages, request_payload.max_new_tokens)
+        schema = request_payload.response_schema
+        response_format = (
+            {"type": "json_schema", "json_schema": {"name": schema["title"], "schema": schema, "strict": True}}
+            if schema
+            else None
+        )
+        try:
+            response_payload = self._post_chat(messages, request_payload.max_new_tokens, response_format)
+        except ProviderHTTPError as exc:
+            if response_format is None or exc.code not in {400, 422}:
+                raise
+            # Not every OpenAI-compatible server takes response_format; the text parsers still apply.
+            response_format = None
+            response_payload = self._post_chat(messages, request_payload.max_new_tokens)
         text = extract_chat_completion_text(response_payload)
         finish_reasons = [finish_reason(response_payload)]
         usage = dict(response_payload.get("usage", {}))
@@ -447,17 +462,22 @@ class OpenAICompatibleChatAdapter:
                 "finish_reason": finish_reasons[-1],
                 "finish_reasons": finish_reasons,
                 "continuation_count": continuation_count,
+                "json_schema": response_format is not None,
                 "usage": usage,
             },
         )
 
-    def _post_chat(self, messages: list[dict[str, str]], max_tokens: int) -> dict[str, Any]:
-        payload = {
+    def _post_chat(
+        self, messages: list[dict[str, str]], max_tokens: int, response_format: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": messages,
             "temperature": 0,
             "max_tokens": max_tokens,
         }
+        if response_format:
+            payload["response_format"] = response_format
         payload.update(self.extra_body)
         headers = {
             "Accept": "application/json",
@@ -478,16 +498,23 @@ class OpenAICompatibleChatAdapter:
                 response_payload = json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
+            raise ProviderHTTPError(
                 f"Provider request failed: HTTP Error {exc.code}: {exc.reason}. "
                 f"Endpoint: {self.endpoint_url}. Model: {self.model_name}. "
-                f"Response: {compact_text(body, 1200)}"
+                f"Response: {compact_text(body, 1200)}",
+                code=exc.code,
             ) from exc
         except error.URLError as exc:
             raise RuntimeError(
                 f"Provider request failed: {exc.reason}. Endpoint: {self.endpoint_url}."
             ) from exc
         return response_payload
+
+
+class ProviderHTTPError(RuntimeError):
+    def __init__(self, message: str, code: int) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class _RefuseRedirects(request.HTTPRedirectHandler):
@@ -822,6 +849,18 @@ def strip_reasoning_blocks(text: str) -> str:
             r"^.*?</think\s*>", "", without_blocks, count=1, flags=re.IGNORECASE | re.DOTALL
         )
     return without_blocks.strip()
+
+
+def extract_json_object(text: str) -> dict[str, Any] | None:
+    """The JSON object in model output, ignoring reasoning blocks, markdown fences and surrounding prose."""
+    match = re.search(r"\{.*\}", strip_reasoning_blocks(text or ""), flags=re.DOTALL)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def count_tokens(text: str) -> int:

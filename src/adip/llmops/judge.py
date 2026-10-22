@@ -14,8 +14,6 @@ API keys are passed per call and never written to disk.
 
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -23,7 +21,7 @@ from typing import Any, Protocol, runtime_checkable
 from adip.llmops.models import (
     GenerationRequest,
     OpenAICompatibleChatAdapter,
-    strip_reasoning_blocks,
+    extract_json_object,
 )
 from adip.llmops.prompts import DEFAULT_PROMPT_DIR, load_prompt_template
 
@@ -61,15 +59,13 @@ def parse_judge_verdict(text: str) -> JudgeVerdict | None:
     None when no well-formed verdict can be recovered so callers can count the
     failure instead of crashing the eval.
     """
-    cleaned = strip_reasoning_blocks(text or "")
-    match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-    if not match:
+    payload = extract_json_object(text)
+    if payload is None:
         return None
     try:
-        payload = json.loads(match.group(0))
         faithfulness = _clamp(payload["faithfulness"])
         relevance = _clamp(payload["relevance"])
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError):
         return None
     claims = payload.get("unsupported_claims") or []
     if not isinstance(claims, list):

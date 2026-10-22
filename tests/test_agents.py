@@ -128,7 +128,7 @@ def test_agent_can_run_reasoning_verifier():
     )
 
     assert result.state.status == "completed"
-    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v2"
+    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v3"
     assert result.state.reasoning_llmops["structured_output"]["structured"] is True
     assert result.state.metrics["reasoning_verifier_enabled"] is True
     assert result.state.metrics["reasoning_llm_structured_output"] == 1.0
@@ -159,7 +159,7 @@ def test_agent_can_run_reasoning_planner_and_verifier():
 
     assert result.state.status == "completed"
     assert result.state.planning_llmops["prompt"]["version"] == "plan_v1"
-    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v2"
+    assert result.state.reasoning_llmops["prompt"]["version"] == "verify_v3"
     assert result.state.metrics["reasoning_planner_enabled"] is True
     assert result.state.metrics["planning_llm_input_token_count"] > 0
 
