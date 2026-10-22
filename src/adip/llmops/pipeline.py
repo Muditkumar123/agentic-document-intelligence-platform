@@ -27,6 +27,7 @@ from adip.llmops.nli import EntailmentScorer
 from adip.llmops.prompts import PromptTemplate, load_prompt_template
 from adip.llmops.verifier import VERIFIER_NOTES_SCHEMA, normalize_verifier_output
 from adip.rag.decompose import SUB_QUESTIONS_SCHEMA
+from adip.tracing import set_attributes, span
 
 # Tasks whose output code parses; providers that support it are asked to follow the schema.
 RESPONSE_SCHEMAS = {"verify": VERIFIER_NOTES_SCHEMA, "decompose": SUB_QUESTIONS_SCHEMA}
@@ -171,17 +172,37 @@ def generate_grounded_response(
             device=device,
             extra_body=extra_body,
         )
-    generation = adapter.generate(
-        GenerationRequest(
-            prompt=rendered_prompt,
-            question=question,
-            task_type=task_type,
-            domain_preset=domain_preset,
-            evidence=evidence,
-            max_new_tokens=resolved_max_new_tokens,
-            response_schema=RESPONSE_SCHEMAS.get(task_type),
+    call_attributes = {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.system": resolved_provider,
+        "gen_ai.provider.name": resolved_provider,
+        "gen_ai.request.model": resolved_model_name,
+        "gen_ai.request.max_tokens": resolved_max_new_tokens,
+        "adip.task_type": task_type,
+        "adip.prompt.version": prompt.version,
+        "adip.evidence_count": len(evidence),
+    }
+    with span(f"chat {resolved_model_name or resolved_provider}", call_attributes) as model_span:
+        generation = adapter.generate(
+            GenerationRequest(
+                prompt=rendered_prompt,
+                question=question,
+                task_type=task_type,
+                domain_preset=domain_preset,
+                evidence=evidence,
+                max_new_tokens=resolved_max_new_tokens,
+                response_schema=RESPONSE_SCHEMAS.get(task_type),
+            )
         )
-    )
+        set_attributes(
+            model_span,
+            {
+                "gen_ai.response.model": generation.model_name,
+                "gen_ai.usage.input_tokens": generation.input_token_count,
+                "gen_ai.usage.output_tokens": generation.output_token_count,
+                "adip.latency_ms": generation.latency_ms,
+            },
+        )
     structured_output = None
     quality_text = generation.text
     if task_type == "verify":

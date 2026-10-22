@@ -6,7 +6,7 @@ CI turns the project's deterministic evaluations into automated regression gates
 
 ### 1. `test` — unit tests
 
-- Installs the package with only the declared dependencies: `pip install -e ".[dev,api]"` (no torch, faiss, or transformers — those are lazy-imported and stubbed in tests).
+- Installs the package with only the declared dependencies: `pip install -e ".[dev,api,agents,vectordb,tracing]"` (no torch, faiss, or transformers — those are lazy-imported and stubbed in tests). The `tracing` extra is there so the OpenTelemetry span tests run instead of skipping.
 - Runs the full `pytest` suite on a matrix of Python **3.10, 3.11, 3.12, and 3.14**.
 
 ### 2. `eval-gate` — answer-quality regression gate

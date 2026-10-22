@@ -28,6 +28,7 @@ from adip.agents.nodes import (
 )
 from adip.rag.coverage import DEFAULT_COVERAGE_THRESHOLD
 from adip.rag.retriever import RagIndex, load_index
+from adip.tracing import mark_error, set_attributes, span
 
 AgentNode = Callable[[AgentState, RagIndex], AgentState]
 
@@ -256,10 +257,36 @@ def run_agent(
     )
 
     workflow_started = time.perf_counter()
-    if resolved_engine == "langgraph":
-        state = run_agent_graph(state, index, nodes, _run_node, routes)
-    else:
-        state = run_sequential(state, index, nodes, routes)
+    run_attributes = {
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.agent.name": "adip",
+        "adip.run_id": state.run_id,
+        "adip.engine": resolved_engine,
+        "adip.task": task,
+        "adip.top_k": top_k,
+        "adip.index.backend": index.backend,
+        "adip.decomposer": decomposer,
+        "adip.reranker": reranker,
+        "adip.model_profile": model_profile,
+    }
+    with span("invoke_agent adip", run_attributes) as run_span:
+        if resolved_engine == "langgraph":
+            state = run_agent_graph(state, index, nodes, _run_node, routes)
+        else:
+            state = run_sequential(state, index, nodes, routes)
+        set_attributes(
+            run_span,
+            {
+                "adip.status": state.status,
+                "adip.task_type": state.task_type,
+                "adip.retrieval.round_count": state.metrics.get("retrieval_round_count", 0),
+                "adip.retrieval.call_count": state.metrics.get("retrieval_call_count", 0),
+                "adip.retrieval.retry_count": len(state.retrieval_retries),
+                "adip.citation_count": len(state.citations),
+            },
+        )
+        if state.status == "failed":
+            mark_error(run_span, "agent run failed")
 
     state.metrics["workflow_duration_ms"] = (time.perf_counter() - workflow_started) * 1000
     trace_path = write_trace(state, trace_dir) if trace_dir else None
@@ -315,13 +342,23 @@ def _run_node(node_name: str, node: AgentNode, state: AgentState, index: RagInde
     error = None
     status = "completed"
 
-    try:
-        state = node(state, index)
-    except Exception as exc:  # pragma: no cover - defensive trace path
-        status = "failed"
-        error = str(exc)
-        state.status = "failed"
-        state.verification_notes.append(f"Node {node_name} failed: {exc}")
+    with span(f"agent.node {node_name}", {"adip.node": node_name}) as node_span:
+        try:
+            state = node(state, index)
+        except Exception as exc:  # pragma: no cover - defensive trace path
+            status = "failed"
+            error = str(exc)
+            state.status = "failed"
+            state.verification_notes.append(f"Node {node_name} failed: {exc}")
+            mark_error(node_span, error)
+        set_attributes(
+            node_span,
+            {
+                "adip.status": state.status,
+                "adip.retrieved_count": len(state.retrieved),
+                "adip.retrieval.round_count": state.metrics.get("retrieval_round_count", 0),
+            },
+        )
 
     ended_at = utc_now_iso()
     duration_ms = (time.perf_counter() - start_time) * 1000

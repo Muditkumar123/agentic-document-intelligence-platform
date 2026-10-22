@@ -34,13 +34,17 @@ Live demo: [agentic-document-intelligence.onrender.com](https://agentic-document
 - **Writers**: a deterministic extractive baseline (runs anywhere, keeps CI
   stable), local Qwen3-8B or DeepSeek-R1-Distill through an OpenAI-compatible
   server, or any hosted endpoint.
+- **Tracing**: optional OpenTelemetry spans for every agent run, node,
+  retrieval search and model call (GenAI attribute names, token usage), sent
+  over OTLP to Langfuse, Arize Phoenix or any collector. Off unless
+  configured; prompts, document text and keys are never recorded.
 - **Ops**: tracked runs, a DVC pipeline, a Docker image built and smoke-tested
   in CI, in-process index/query caching (~30x on repeated queries), and query
   drift monitoring (OOV rate, question-length shift, PSI against a
   golden-question baseline).
 
 The heavy pieces are optional extras (`[api]`, `[agents]`, `[ragas]`,
-`[tables]`, `[finetune]`), so the core installs and tests without torch,
+`[tables]`, `[finetune]`, `[tracing]`), so the core installs and tests without torch,
 transformers or faiss.
 
 ## Evaluation
@@ -115,6 +119,7 @@ size-limited, and indexes are stored without pickle. See the
 | [docs/LLMOPS.md](docs/LLMOPS.md) | Generation eval, LLM-as-judge, RAGAS |
 | [docs/MLOPS.md](docs/MLOPS.md) | Tracked runs, DVC, MLflow hooks |
 | [docs/CICD.md](docs/CICD.md) | CI stages and the eval quality gate |
+| [docs/TRACING.md](docs/TRACING.md) | OpenTelemetry tracing with Phoenix or Langfuse |
 | [docs/FINETUNING.md](docs/FINETUNING.md) | LoRA experiment design and results |
 | [docs/SERVING.md](docs/SERVING.md) | Local model serving (Qwen, DeepSeek) |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Container image and Render deployment |
