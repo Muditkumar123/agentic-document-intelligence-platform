@@ -8,6 +8,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # ragas 0.4 imports langchain_community.chat_models.vertexai, removed in 0.4.
+      - dependency-name: langchain-community
+        versions: [">=0.4"]
   - package-ecosystem: pip
     directory: /infra/docker
     schedule:
