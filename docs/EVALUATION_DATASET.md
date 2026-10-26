@@ -246,6 +246,33 @@ CUDA_VISIBLE_DEVICES=1 python -m adip.mlops.run_multihop_eval --variants single_
 # add --vector-store qdrant to keep the vectors in Qdrant (needs the [vectordb] extra)
 ```
 
+## Reranker on ONNX Runtime (CPU)
+
+The cross-encoder reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2`) can be exported to ONNX and run on ONNX Runtime instead of PyTorch (`adip/rag/onnx_reranker.py`; pass `cross_encoder_onnx=<path to model.onnx>` to `rerank_results`). The export also writes a dynamically quantized INT8 copy: weights stored as 8-bit integers, activations quantized on the fly, no calibration data.
+
+**Workload.** The 47 golden and 20 reworded questions each retrieve 15 candidates with TF-IDF over the 173-chunk multi-hop corpus. Every runtime scores all 1,005 (question, chunk) pairs in batches of 16, with chunks truncated at 512 tokens. CPU only: AMD EPYC 7452, the thread count fixed for both PyTorch and ONNX Runtime, three warm-up questions excluded. "Top-5 identical" counts questions whose reranked top 5 is in exactly the same order as PyTorch's.
+
+| Threads | Runtime | Model size | p50 / p95 per question | Pairs/s | Speed-up (p50) | Max score diff vs PyTorch | Top-1 agrees | Top-5 identical | Hit@5 / MRR@5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | PyTorch FP32 | 91 MB | 3,485 / 3,509 ms | 4.3 | 1.00× | — | — | — | 0.940 / 0.910 |
+| 1 | ONNX Runtime FP32 | 91 MB | 3,102 / 3,142 ms | 4.8 | 1.12× | 9.5×10⁻⁶ | 100% | 100% | 0.940 / 0.910 |
+| 1 | ONNX Runtime INT8 | 23 MB | 2,835 / 2,930 ms | 5.2 | 1.23× | 1.1 | 97% | 46% | 0.940 / 0.906 |
+| 4 | PyTorch FP32 | 91 MB | 1,515 / 1,571 ms | 10.0 | 1.00× | — | — | — | 0.940 / 0.910 |
+| 4 | ONNX Runtime FP32 | 91 MB | 900 / 1,025 ms | 16.4 | 1.68× | 9.5×10⁻⁶ | 100% | 100% | 0.940 / 0.910 |
+| 4 | ONNX Runtime INT8 | 23 MB | 864 / 934 ms | 17.0 | 1.75× | 1.1 | 97% | 46% | 0.940 / 0.906 |
+
+What it shows:
+
+1. **ONNX Runtime FP32 is a drop-in replacement.** Scores match PyTorch to 10⁻⁵ and every reranked list is identical, while it runs 1.12× faster on one thread and 1.68× faster on four.
+2. **INT8 trades exact order for size.** The model is 4× smaller and slightly faster again, and the top result still matches PyTorch on 97% of questions. But only 46% of top-5 lists keep exactly the same order, because quantization shifts scores by up to 1.1. Hit@5 is unchanged (0.940); MRR@5 drops from 0.910 to 0.906.
+3. **INT8's speed gain over ONNX FP32 is small on this CPU** (4–9%). Dynamic quantization mostly saves memory and disk here. The larger speed gains of INT8 depend on hardware with fast integer kernels, and static quantization with calibration data could recover more; neither was measured.
+
+Reproduce (needs the `onnx` extra plus torch and transformers to export):
+
+```bash
+python -m adip.mlops.run_reranker_benchmark --model cross-encoder/ms-marco-MiniLM-L-6-v2 --onnx-dir data/models/onnx-reranker --threads 1,4
+```
+
 ## Earlier Benchmark Snapshot (self-authored corpus)
 
 On the original 10-document self-authored corpus, after adding cross-encoder reranking (superseded by the public-document corpus above, kept for the reranking story):
