@@ -27,3 +27,4 @@ data/monitoring/mlops_runs/
 models/*
 !models/.gitkeep
 data/monitoring/query_log.jsonl
+data/models/

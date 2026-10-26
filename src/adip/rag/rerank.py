@@ -48,6 +48,7 @@ def rerank_results(
     cross_encoder_device: str | None = None,
     cross_encoder_local_files_only: bool = True,
     cross_encoder_batch_size: int = 16,
+    cross_encoder_onnx: str | None = None,
 ) -> list[RetrievedChunk]:
     if reranker == "none":
         return retrieved[:top_k] if top_k is not None else retrieved
@@ -58,6 +59,16 @@ def rerank_results(
 
     if reranker == "lexical":
         scores = score_lexical_candidates(question, retrieved)
+    elif cross_encoder_onnx:
+        # An exported ONNX model (see adip.rag.onnx_reranker) replaces the PyTorch forward pass.
+        from adip.rag.onnx_reranker import score_onnx_pairs
+
+        scores = score_onnx_pairs(
+            question,
+            [item.chunk["text"] for item in retrieved],
+            cross_encoder_onnx,
+            batch_size=cross_encoder_batch_size,
+        )
     else:
         scores = score_cross_encoder_candidates(
             question=question,

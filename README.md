@@ -20,7 +20,8 @@ Live demo: [agentic-document-intelligence.onrender.com](https://agentic-document
 - **Retrieval**: TF-IDF, dense and hybrid (BM25 fused with dense rankings
   via reciprocal-rank fusion). Dense uses LSA by default, or neural
   embeddings (bge-m3 or Qwen3-Embedding-0.6B). Optional extras: a cross-encoder
-  reranker (bge-reranker-v2-m3) applied per search in the agent loop, a Qdrant
+  reranker (bge-reranker-v2-m3) applied per search in the agent loop and exportable
+  to ONNX Runtime (FP32 or INT8), a Qdrant
   vector store (embedded or server), and multi-query rewriting.
 - **Agent loop** on LangGraph: intent_router, planner, retriever,
   evidence_verifier, writer, citation_checker. The planner splits multi-part
@@ -68,6 +69,9 @@ unanswerable probes, so the numbers aren't overfit to project-authored text.
 - On a paraphrase probe set (reworded questions with no keyword overlap),
   plain TF-IDF gets 0.85 hit@5; hybrid retrieval plus LLM query rewriting
   reaches 1.00 hit@5 / 0.90 MRR.
+- On CPU, the MiniLM reranker on ONNX Runtime returns the same rankings as PyTorch
+  (scores within 10⁻⁵) 1.68× faster at four threads; an INT8 copy is 4× smaller
+  with the same hit@5 ([benchmark](docs/EVALUATION_DATASET.md#reranker-on-onnx-runtime-cpu)).
 - LLM-as-judge and RAGAS passes score the same answers semantically. One
   finding worth reading: the same 8B model that scores 0.40 as a free-form
   faithfulness judge scores 0.925 through RAGAS claim decomposition
