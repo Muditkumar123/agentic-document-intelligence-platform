@@ -1,12 +1,21 @@
-"""Second-stage reranking helpers for retrieved chunks."""
+"""Second-stage reranking helpers for retrieved chunks.
+
+The cross-encoder runs on PyTorch unless the server sets ``ADIP_RERANKER_ONNX`` to
+an ONNX export (``model.onnx`` or ``model.int8.onnx`` from ``adip.rag.onnx_reranker``).
+Then every caller that asks for the model it was exported from (the API, the agent,
+the CLIs) reranks on ONNX Runtime instead; other models stay on PyTorch.
+"""
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
+import os
 import re
 from collections import Counter
 from functools import lru_cache
+from pathlib import Path
 from typing import Iterable
 
 from adip.rag.retriever import RetrievedChunk
@@ -20,6 +29,7 @@ BGE_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 # 512-token cut would hide the second half of every chunk from the reranker.
 MAX_CROSS_ENCODER_TOKENS = 1024
 MIN_RERANK_CANDIDATES = 10
+ONNX_RERANKER_ENV = "ADIP_RERANKER_ONNX"
 
 
 def resolve_candidate_k(top_k: int, candidate_k: int | None, reranker: str) -> int:
@@ -56,6 +66,8 @@ def rerank_results(
         raise ValueError(f"Unsupported reranker: {reranker}")
     if original_score_weight < 0:
         raise ValueError("original_score_weight must be greater than or equal to 0")
+    if reranker == "cross_encoder" and cross_encoder_onnx is None:
+        cross_encoder_onnx = configured_onnx_reranker(cross_encoder_model)
 
     if reranker == "lexical":
         scores = score_lexical_candidates(question, retrieved)
@@ -94,6 +106,19 @@ def rerank_results(
         RetrievedChunk(chunk=item.chunk, score=item.score, rank=rank)
         for rank, item in enumerate(scored[:limit], start=1)
     ]
+
+
+def configured_onnx_reranker(model_name: str) -> str | None:
+    """The server's ONNX export (``ADIP_RERANKER_ONNX``), if it was exported from ``model_name``."""
+    model_path = os.environ.get(ONNX_RERANKER_ENV, "").strip()
+    if not model_path:
+        return None
+    from adip.rag.onnx_reranker import METADATA_FILENAME
+
+    # A missing or unreadable metadata file raises: a misconfigured server should fail loudly,
+    # not quietly fall back to PyTorch.
+    metadata = json.loads((Path(model_path).parent / METADATA_FILENAME).read_text(encoding="utf-8"))
+    return model_path if metadata["model_name"] == model_name else None
 
 
 def score_lexical_candidates(question: str, retrieved: list[RetrievedChunk]) -> list[float]:
