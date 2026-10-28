@@ -1,10 +1,18 @@
 import importlib.util
+import json
 import math
 
 import pytest
 
-from adip.rag.onnx_reranker import FP32_FILENAME, INT8_FILENAME, export_cross_encoder, score_onnx_pairs
-from adip.rag.rerank import rerank_results, score_cross_encoder_pairs
+from adip.rag import onnx_reranker, rerank
+from adip.rag.onnx_reranker import (
+    FP32_FILENAME,
+    INT8_FILENAME,
+    METADATA_FILENAME,
+    export_cross_encoder,
+    score_onnx_pairs,
+)
+from adip.rag.rerank import ONNX_RERANKER_ENV, rerank_results, score_cross_encoder_pairs
 from adip.rag.retriever import RetrievedChunk
 
 HAVE_RUNTIMES = all(importlib.util.find_spec(name) for name in ("torch", "transformers", "onnx", "onnxruntime"))
@@ -69,8 +77,9 @@ def test_int8_model_scores_every_pair(tiny_cross_encoder):
 
 
 @needs_runtimes
-def test_rerank_results_gives_the_same_order_on_both_runtimes(tiny_cross_encoder):
+def test_rerank_results_gives_the_same_order_on_both_runtimes(tiny_cross_encoder, monkeypatch):
     model_dir, exported = tiny_cross_encoder
+    monkeypatch.delenv(ONNX_RERANKER_ENV, raising=False)
     retrieved = [
         RetrievedChunk(chunk={"chunk_id": f"c{i}", "text": text}, score=0.1, rank=i + 1) for i, text in enumerate(TEXTS)
     ]
@@ -85,3 +94,26 @@ def test_onnx_scoring_validates_input_before_loading_anything():
     assert score_onnx_pairs(QUESTION, [], "missing.onnx") == []
     with pytest.raises(ValueError):
         score_onnx_pairs(QUESTION, TEXTS, "missing.onnx", batch_size=0)
+
+
+def test_server_setting_routes_the_exported_model_to_onnx(tmp_path, monkeypatch):
+    (tmp_path / METADATA_FILENAME).write_text(json.dumps({"model_name": "exported/model"}), encoding="utf-8")
+    monkeypatch.setenv(ONNX_RERANKER_ENV, str(tmp_path / FP32_FILENAME))
+    calls = []
+    monkeypatch.setattr(onnx_reranker, "score_onnx_pairs", lambda q, texts, path, **_: calls.append(("onnx", path)) or [0.0, 1.0])
+    monkeypatch.setattr(rerank, "score_cross_encoder_candidates", lambda **kw: calls.append(("torch", kw["model_name"])) or [0.0, 1.0])
+    retrieved = [RetrievedChunk(chunk={"chunk_id": f"c{i}", "text": text}, score=0.1, rank=i + 1) for i, text in enumerate(TEXTS[:2])]
+
+    onnx_order = rerank_results(QUESTION, retrieved, reranker="cross_encoder", cross_encoder_model="exported/model")
+    rerank_results(QUESTION, retrieved, reranker="cross_encoder", cross_encoder_model="some/other-model")
+
+    assert calls == [("onnx", str(tmp_path / FP32_FILENAME)), ("torch", "some/other-model")]
+    assert [item.chunk["chunk_id"] for item in onnx_order] == ["c1", "c0"]
+
+
+def test_server_setting_without_metadata_fails_loudly(tmp_path, monkeypatch):
+    monkeypatch.setenv(ONNX_RERANKER_ENV, str(tmp_path / FP32_FILENAME))
+    retrieved = [RetrievedChunk(chunk={"chunk_id": "c0", "text": TEXTS[0]}, score=0.1, rank=1)]
+
+    with pytest.raises(FileNotFoundError):
+        rerank_results(QUESTION, retrieved, reranker="cross_encoder")
