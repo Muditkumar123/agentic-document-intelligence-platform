@@ -248,7 +248,7 @@ CUDA_VISIBLE_DEVICES=1 python -m adip.mlops.run_multihop_eval --variants single_
 
 ## Reranker on ONNX Runtime (CPU)
 
-The cross-encoder reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2`) can be exported to ONNX and run on ONNX Runtime instead of PyTorch (`adip/rag/onnx_reranker.py`). Set `ADIP_RERANKER_ONNX=<path to model.onnx>` on the server and the API, the agent and the CLIs use it whenever they ask for the model it was exported from; in code, `rerank_results(..., cross_encoder_onnx=<path>)` does the same for one call. The export also writes a dynamically quantized INT8 copy: weights stored as 8-bit integers, activations quantized on the fly, no calibration data.
+The cross-encoder reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2`) can be exported to ONNX and run on ONNX Runtime instead of PyTorch (`adip/rag/onnx_reranker.py`). Set `ADIP_RERANKER_ONNX=<path to model.onnx>` on the server and `/rag/query`, `/agent/run`, the RAG CLIs and the evals use it whenever they rerank with the model it was exported from; in code, `rerank_results(..., cross_encoder_onnx=<path>)` does the same for one call. The export also writes a dynamically quantized INT8 copy: weights stored as 8-bit integers, activations quantized on the fly, no calibration data.
 
 **Workload.** The 47 golden and 20 reworded questions each retrieve 15 candidates with TF-IDF over the 173-chunk multi-hop corpus. Every runtime scores all 1,005 (question, chunk) pairs in batches of 16, with chunks truncated at 512 tokens. CPU only: AMD EPYC 7452, the thread count fixed for both PyTorch and ONNX Runtime, three warm-up questions excluded. "Top-5 identical" counts questions whose reranked top 5 is in exactly the same order as PyTorch's.
 

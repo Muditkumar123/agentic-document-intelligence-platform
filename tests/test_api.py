@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import adip.api.app as api_app
+import adip.api.cache as api_cache
 import adip.api.services as api_services
 from adip.api.app import create_app
 from adip.api.schemas import AgentRunRequest
@@ -235,6 +236,43 @@ def test_api_agent_run_writes_trace(tmp_path):
     assert payload["quality"]["evidence_count"] == 1
     assert Path(payload["trace_path"]).exists()
     assert Path(payload["trace_path"]).parent == settings.trace_dir
+
+
+def test_api_agent_run_reranks_each_stream_and_reuses_the_loaded_index(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
+    loads = []
+    real_load_index = api_cache.load_index
+    monkeypatch.setattr(api_cache, "load_index", lambda path: loads.append(path) or real_load_index(path))
+    body = {"question": "What does the agent verify?", "task": "qa", "top_k": 1, "reranker": "lexical"}
+
+    first = client.post("/agent/run", json=body)
+    second = client.post("/agent/run", json=body)
+
+    assert first.status_code == second.status_code == 200
+    state = first.json()["state"]
+    assert state["reranker"] == "lexical"
+    assert state["metrics"]["reranker"] == "lexical"
+    assert len(loads) == 1
+
+
+def test_api_agent_run_rejects_arbitrary_reranker_models(tmp_path):
+    settings = make_settings(tmp_path)
+    save_test_index(settings.index_path())
+    client = make_client(settings)
+
+    response = client.post(
+        "/agent/run", json={"question": "q", "reranker": "cross_encoder", "cross_encoder_model": "/etc/some-model"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_agent_run_without_an_index_is_not_found(tmp_path):
+    client = make_client(make_settings(tmp_path))
+
+    assert client.post("/agent/run", json={"question": "q"}).status_code == 404
 
 
 def test_api_upload_document_saves_supported_file(tmp_path):

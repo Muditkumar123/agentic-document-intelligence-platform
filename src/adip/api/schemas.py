@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from adip.rag.rerank import DEFAULT_CROSS_ENCODER_MODEL
 
 IndexBackend = Literal["tfidf", "dense", "hybrid"]
+# A fixed choice, not any Hugging Face id or local path: clients don't pick what the server loads.
+CrossEncoderModel = Literal["cross-encoder/ms-marco-MiniLM-L-6-v2", "BAAI/bge-reranker-v2-m3"]
 
 
 class RagQueryRequest(BaseModel):
@@ -28,10 +30,7 @@ class RagQueryRequest(BaseModel):
     reranker: Literal["none", "lexical", "cross_encoder"] = "none"
     rewriter: Literal["none", "keywords"] = "none"
     rerank_weight: float = Field(default=0.25, ge=0)
-    # A fixed choice, not any Hugging Face id or local path: clients don't pick what the server loads.
-    cross_encoder_model: Literal["cross-encoder/ms-marco-MiniLM-L-6-v2", "BAAI/bge-reranker-v2-m3"] = (
-        DEFAULT_CROSS_ENCODER_MODEL
-    )
+    cross_encoder_model: CrossEncoderModel = DEFAULT_CROSS_ENCODER_MODEL
     cross_encoder_device: str | None = None
     cross_encoder_batch_size: int = Field(default=16, ge=1)
     use_cache: bool = True
@@ -67,6 +66,9 @@ class AgentRunRequest(BaseModel):
     # (up to this many extra rounds) when the evidence does not cover the question.
     decomposer: Literal["none", "rules", "llm"] = "rules"
     max_retrieval_retries: int = Field(default=2, ge=0, le=4)
+    # Rerank every search stream against its own query (see adip.agents.nodes.search_stream).
+    reranker: Literal["none", "lexical", "cross_encoder"] = "none"
+    cross_encoder_model: CrossEncoderModel = DEFAULT_CROSS_ENCODER_MODEL
 
 
 class RebuildIndexRequest(BaseModel):
