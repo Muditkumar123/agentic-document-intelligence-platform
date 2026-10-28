@@ -114,6 +114,8 @@ The response includes the final answer, AgentOps trace events, LLMOps metadata, 
 
 The retrieval loop is on by default: `decomposer` (`rules`, `llm`, or `none`) controls whether multi-part questions are split into sub-questions (`llm` uses the reasoning model), and `max_retrieval_retries` (0–4, default 2) caps the follow-up search rounds the verifier may start when the evidence does not cover the question. The response's `state.sub_questions`, `state.retrieval_streams` (every search, with its query, round, and whether it was kept), `state.sub_question_support` (coverage and missing terms), and `state.retrieval_retries` (each follow-up round and why it ran) show what the loop did.
 
+Set `reranker` (`none`, `lexical` or `cross_encoder`; default `none`) to rerank every search stream against its own query, and `cross_encoder_model` to pick one of the two supported cross-encoders, as on `/rag/query`. With `ADIP_RERANKER_ONNX` set on the server, cross-encoder reranking runs on ONNX Runtime ([DEPLOY.md](DEPLOY.md)). The agent loads its index through the same index cache as `/rag/query`, so repeated agent calls don't reload it from disk.
+
 Set `reasoning_effort` (`auto`/`none`/`low`/`medium`/`high`) to control a thinking model's hidden reasoning. `auto` leaves the provider default untouched; `none` disables thinking on Gemini so the whole token budget goes to the visible answer. It is forwarded to OpenAI-compatible endpoints, including dashboard-added models.
 
 List available model profiles:
@@ -184,7 +186,7 @@ This returns the current retrieval benchmark headline metrics for the dashboard.
 curl http://127.0.0.1:8010/monitoring/cache
 ```
 
-Reports hit/miss statistics for the two in-process caches: the **index cache** (loaded indexes keyed by index file mtime, so a rebuild invalidates naturally — no explicit invalidation hooks to forget) and the **query cache** (bounded LRU over full `/rag/query` responses, keyed by request payload + index mtime). Cached responses carry `"cached": true` and skip retrieval entirely (~30x faster on repeats); pass `"use_cache": false` in the query request to bypass. This is deliberately single-process (works on the free hosting tier, vanishes on restart); Redis is the documented upgrade path for multi-instance deployments.
+Reports hit/miss statistics for the two in-process caches: the **index cache** (loaded indexes, shared by `/rag/query` and `/agent/run`, keyed by index file mtime, so a rebuild invalidates naturally — no explicit invalidation hooks to forget) and the **query cache** (bounded LRU over full `/rag/query` responses, keyed by request payload + index mtime). Cached responses carry `"cached": true` and skip retrieval entirely (~30x faster on repeats); pass `"use_cache": false` in the query request to bypass. This is deliberately single-process (works on the free hosting tier, vanishes on restart); Redis is the documented upgrade path for multi-instance deployments.
 
 ## Drift Monitoring
 

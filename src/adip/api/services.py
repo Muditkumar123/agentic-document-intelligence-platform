@@ -402,6 +402,7 @@ def run_agent_workflow(
     result = run_agent_from_index_path(
         question=request.question,
         index_path=index_path,
+        index_loader=INDEX_CACHE.get,
         task=request.task,
         domain_preset=request.domain,
         top_k=request.top_k,
@@ -426,6 +427,8 @@ def run_agent_workflow(
         engine=request.engine,
         decomposer=request.decomposer,
         max_retrieval_retries=request.max_retrieval_retries,
+        reranker=request.reranker,
+        rerank_model=request.cross_encoder_model,
     )
     payload = result.to_dict()
     payload["latency_ms"] = (time.perf_counter() - started) * 1000

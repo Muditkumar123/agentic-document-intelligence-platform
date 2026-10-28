@@ -101,8 +101,9 @@ def run_agent_from_index_path(
     reranker: str = "none",
     rerank_model: str | None = None,
     rerank_candidate_k: int | None = None,
+    index_loader: Callable[[Path], RagIndex] = load_index,
 ) -> AgentResult:
-    index = load_index(index_path)
+    index = index_loader(index_path)
     return run_agent(
         question=question,
         index=index,
