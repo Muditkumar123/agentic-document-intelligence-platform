@@ -7,7 +7,7 @@ fastapi==0.147.0
 h11==0.16.0
 idna==3.18
 Jinja2==3.1.6
-joblib==1.5.3
+joblib==1.6.0
 MarkupSafe==3.0.4
 narwhals==2.27.1
 numpy==2.5.4
